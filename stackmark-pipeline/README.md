@@ -12,6 +12,7 @@ cd stackmark-pipeline
 # 2. Set your xAI API key
 cp .env.example .env
 # Edit .env and add your key from https://console.x.ai/team/default/api-keys
+# Optional but recommended: add X_API_BEARER_TOKEN for deterministic quote-tweet detection
 
 # 3. Run it (uv handles venv + deps automatically)
 uv run pipeline.py "https://x.com/someone/status/123456"
@@ -25,7 +26,7 @@ That's it. `uv run` will:
 ## What it does
 
 ```
-Tweet URL → Classify → Fetch (x_search) → AI Enrich (Grok) → Print Description
+Tweet URL → Classify → Fetch (x_search) → AI Enrich (Grok) → Detect quote tweet → Merge quoted content → Print output
 ```
 
 The output is a JSON payload optimized for vector embedding search:
