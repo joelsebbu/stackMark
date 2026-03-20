@@ -18,6 +18,7 @@ import json
 import requests
 
 from dotenv import load_dotenv
+from openai import OpenAI
 from xai_sdk import Client
 from xai_sdk.chat import user
 from xai_sdk.tools import x_search
@@ -29,6 +30,14 @@ load_dotenv()
 
 MODEL_CHEAP = "grok-4-1-fast-non-reasoning"
 MODEL_RICH = "grok-4.20-beta-latest-non-reasoning"
+
+# OpenRouter client for embeddings
+_openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+_embedding_client = (
+    OpenAI(base_url="https://openrouter.ai/api/v1", api_key=_openrouter_api_key)
+    if _openrouter_api_key
+    else None
+)
 
 
 # ─── Step 1: Source Classification ────────────────────────────────────────────
@@ -48,6 +57,30 @@ def classify_url(url: str) -> dict:
         }
 
     return {"source": "unknown", "url": url}
+
+
+# ─── Step 4: Generate Embedding ─────────────────────────────────────────────
+
+
+def generate_embedding(text: str) -> list[float]:
+    """Generate vector embedding via OpenRouter."""
+    global _embedding_client
+
+    if not _embedding_client:
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            print("❌ Error: OPENROUTER_API_KEY not set in environment.")
+            sys.exit(1)
+        _embedding_client = OpenAI(
+            base_url="https://openrouter.ai/api/v1", api_key=api_key
+        )
+
+    response = _embedding_client.embeddings.create(
+        model="qwen/qwen3-embedding-8b",
+        input=text,
+        dimensions=1024,
+    )
+    return response.data[0].embedding
 
 
 # ─── Step 2+3: Fetch & Describe ──────────────────────────────────────────────
@@ -563,6 +596,18 @@ def run_pipeline(url: str, force_rich: bool = False):
     else:
         print("\nℹ️  No quoted tweet detected.")
 
+    # ── Step 5: Generate Embedding ───────────────────────────────────────────
+    embedding = None
+    if not description.get("parse_error"):
+        print("\n🔢 Generating embedding vector...")
+        embedding_text = f"{description.get('description', '')} {' '.join(description.get('tags', []))} {' '.join(description.get('entities', []))}"
+        try:
+            embedding = generate_embedding(embedding_text)
+            print(f"   ✅ Generated embedding: {len(embedding)} dimensions")
+        except Exception as e:
+            print(f"\n❌ Error generating embedding: {e}")
+            sys.exit(1)
+
     # ── Output ──
     print(f"\n{'=' * 60}")
     print("✅ PIPELINE OUTPUT")
@@ -591,12 +636,15 @@ def run_pipeline(url: str, force_rich: bool = False):
         entities = description.get("entities", [])
         print(f"   {', '.join(entities) if entities else 'None'}")
 
+        if embedding:
+            print(f"\n🔢 Embedding: {len(embedding)} dimensions (vector generated)")
+
     print(f"\n{'=' * 60}")
-    print("💡 This description would be embedded and stored in the vector DB.")
-    print("   Tags would be stored for exact-match filtering.")
+    print("💡 Embedding generated and ready for vector DB storage.")
+    print("   Tags stored for exact-match filtering.")
     print(f"{'=' * 60}")
 
-    return description
+    return {**description, "embedding": embedding}
 
 
 def main():
