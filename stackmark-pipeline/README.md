@@ -28,15 +28,18 @@ That's it. `uv run` will:
 Tweet URL → Classify → Fetch (x_search) → AI Enrich (Grok) → Print Description
 ```
 
-The output is a JSON description optimized for vector embedding search:
+The output is a JSON payload optimized for vector embedding search:
 
 ```json
 {
-  "description": "A tweet announcing FastAPI 1.0, a Python web framework...",
-  "topics": ["fastapi", "python", "web framework", "api", "open source"],
+  "description": "fastapi python web framework api announcement open source ...",
+  "tags": ["fastapi", "python", "announcement", "tech", "api"],
   "content_type": "announcement",
-  "mood": "informative",
-  "entities": ["FastAPI", "Sebastián Ramírez", "Python"]
+  "mood": ["informative", "technical"],
+  "entities": ["FastAPI", "Sebastian Ramirez", "Python"],
+  "has_media": false,
+  "media_type": "none",
+  "media_confidence": "high"
 }
 ```
 

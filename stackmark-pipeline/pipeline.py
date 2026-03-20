@@ -32,6 +32,7 @@ MODEL_RICH = "grok-4.20-beta-latest-non-reasoning"
 
 # ─── Step 1: Source Classification ────────────────────────────────────────────
 
+
 def classify_url(url: str) -> dict:
     """Classify the URL and extract useful identifiers."""
 
@@ -51,54 +52,91 @@ def classify_url(url: str) -> dict:
 # ─── Step 2+3: Fetch & Describe ──────────────────────────────────────────────
 
 ENRICHMENT_PROMPT = """\
-You are a bookmark indexer for a personal bookmark manager called StackMark.
+You are a bookmark indexer for StackMark, a personal bookmark manager.
 
-Find the tweet at the URL below using x_search. Analyze ALL content including \
-any images, videos, and text overlays in the media. Then produce a JSON \
-description that will be converted into a vector embedding for semantic search.
+Find the tweet at the URL below using x_search. Analyze ALL content — text, \
+images, videos, text overlays, captions baked into media. Then return a JSON \
+object whose description field will be converted into a vector embedding for \
+cosine similarity search.
 
 Tweet URL: {url}
 
-Return a JSON object with these fields:
+Return ONLY a valid JSON object (no markdown fences, no extra text) with \
+these fields:
 
 {{
-  "description": "A rich 2-3 sentence description of what this content \
-actually shows/says. If it's a video, describe what happens in it. If there's \
-text overlay or captions in images/video, include that. Be SPECIFIC about \
-the actual visual content, not just metadata.",
+  "description": "A dense, keyword-rich block of text that captures \
+everything someone might search to find this content later. Front-load \
+named entities and concrete nouns. Include synonyms and related terms \
+(e.g. 'Kung Fu Panda Po DreamWorks animated panda character'). Cover: \
+what it shows, who/what is in it, what domain it belongs to, what the \
+tone is, and what words a person would type to relocate this bookmark. \
+No filler, no narrative prose, no editorial commentary. Just dense, \
+searchable text.",
 
-  "topics": ["list", "of", "relevant", "searchable", "keywords"],
+  "tags": ["5-10 short lowercase tags for exact-match filtering. \
+Cover: primary topic, people/entities, content type (meme, tutorial, \
+thread, etc.), mood (funny, technical, etc.), and domain (tech, sports, \
+gaming, etc.). Prefer canonical short terms — 'f1' not \
+'formula-one-racing', 'python' not 'python-programming-language'. \
+Max 3 words per tag."],
 
-  "content_type": "one of: meme, tutorial, article, news, thread, tool, \
-library, announcement, opinion, discussion, resource, showcase, other",
+  "content_type": "one of: meme, tutorial, article, news, thread, \
+tool, library, announcement, opinion, discussion, resource, showcase, \
+other",
 
-  "mood": "one of: funny, informative, inspiring, technical, emotional, \
-controversial, casual, serious",
+  "mood": ["one or two from: funny, informative, inspiring, technical, \
+emotional, controversial, casual, serious"],
 
-  "entities": ["specific names of people, characters, brands, tools, \
-technologies mentioned or shown"],
+  "entities": ["proper nouns only — people, characters, brands, tools, \
+technologies, places mentioned or shown"],
 
-  "has_media": true or false,
+  "has_media": true,
 
-  "media_type": "none, image, video, or gif",
+  "media_type": "none | image | video | gif",
 
-  "confidence": "high or low — say low if you cannot see/analyze media \
-content (images, videos) that the tweet contains, or if your description \
-is mostly based on metadata (handles, replies, engagement) rather than \
-the actual content of the tweet"
+  "media_confidence": "high or low (see rules below)"
 }}
 
-IMPORTANT RULES:
-- ACTUALLY WATCH any video and LOOK AT any images. Describe what you see.
-- If there's text overlay on a video/image, include it in the description.
-- Be SPECIFIC — "Po from Kung Fu Panda shuffling scrolls" not "an animated character"
-- Include the DOMAIN: humor, tech, sports, etc.
-- has_media must be true if the tweet contains any image, video, or gif.
-- Return ONLY valid JSON, no markdown fences, no extra text.
+RULES:
+
+1. MEDIA ANALYSIS: ACTUALLY WATCH any video and LOOK AT any images. \
+If there's text overlay or captions baked into video frames or images, \
+transcribe them into the description.
+
+2. SPECIFICITY: Use exact names. "Po from Kung Fu Panda" not "animated \
+character". "FastAPI" not "a web framework". "Charles Leclerc" not \
+"an F1 driver".
+
+3. DESCRIPTION DENSITY: Write for a search engine, not a person. Pack \
+in every relevant term, synonym, and related concept. A good test: if \
+someone searches any reasonable phrase to find this content, at least \
+one phrase in the description should be a near-match.
+
+4. MEDIA CONFIDENCE:
+   - "high" = you viewed and can describe the actual visual content
+   - "low" = the tweet has media you could not analyze, OR your \
+description is mostly based on metadata (handle name, reply context, \
+engagement) rather than actual content
+   - Text-only tweets with no media = always "high"
+
+5. UNAVAILABLE CONTENT: If the tweet is deleted, private, or \
+inaccessible, return:
+   {{"description": "", "tags": [], "content_type": "other", \
+"mood": [], "entities": [], "has_media": false, "media_type": "none", \
+"media_confidence": "low"}}
+
+6. has_media must be true if the tweet contains ANY image, video, or gif.
+
+7. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
+
+8. Return ONLY the JSON object.
 """
 
 
-def fetch_and_describe(client: Client, url_info: dict, use_rich_model: bool = False) -> dict:
+def fetch_and_describe(
+    client: Client, url_info: dict, use_rich_model: bool = False
+) -> dict:
     """Fetch tweet content AND generate description in one Grok call."""
 
     model = MODEL_RICH if use_rich_model else MODEL_CHEAP
@@ -126,9 +164,7 @@ def fetch_and_describe(client: Client, url_info: dict, use_rich_model: bool = Fa
         tools=tools,
     )
 
-    chat.append(
-        user(ENRICHMENT_PROMPT.format(url=url_info["url"]))
-    )
+    chat.append(user(ENRICHMENT_PROMPT.format(url=url_info["url"])))
 
     response = chat.sample()
     result_text = response.content.strip()
@@ -146,6 +182,7 @@ def fetch_and_describe(client: Client, url_info: dict, use_rich_model: bool = Fa
 
 
 # ─── Main Pipeline ────────────────────────────────────────────────────────────
+
 
 def run_pipeline(url: str, force_rich: bool = False):
     """Run the full ingestion pipeline on a URL."""
@@ -181,7 +218,7 @@ def run_pipeline(url: str, force_rich: bool = False):
 
         if not description.get("parse_error"):
             has_media = description.get("has_media", False)
-            confidence = description.get("confidence", "high").lower()
+            confidence = description.get("media_confidence", "high").lower()
 
             if confidence == "low" and has_media:
                 print(f"\n⚠️  Model reported low confidence and tweet has media.")
@@ -204,14 +241,17 @@ def run_pipeline(url: str, force_rich: bool = False):
         print(f"\n📝 Description:")
         print(f"   {description.get('description', 'N/A')}")
 
-        print(f"\n🏷️  Topics:")
-        topics = description.get("topics", [])
-        print(f"   {', '.join(topics)}")
+        print(f"\n🏷️  Tags:")
+        tags = description.get("tags", [])
+        print(f"   {', '.join(tags)}")
 
         print(f"\n📦 Content Type: {description.get('content_type', 'N/A')}")
-        print(f"🎭 Mood: {description.get('mood', 'N/A')}")
-        print(f"🖼️  Has Media: {description.get('has_media', 'N/A')} ({description.get('media_type', 'N/A')})")
-        print(f"🎯 Confidence: {description.get('confidence', 'N/A')}")
+        mood = description.get("mood", [])
+        print(f"🎭 Mood: {', '.join(mood) if mood else 'N/A'}")
+        print(
+            f"🖼️  Has Media: {description.get('has_media', 'N/A')} ({description.get('media_type', 'N/A')})"
+        )
+        print(f"🎯 Media Confidence: {description.get('media_confidence', 'N/A')}")
 
         print(f"\n👤 Entities:")
         entities = description.get("entities", [])
@@ -219,7 +259,7 @@ def run_pipeline(url: str, force_rich: bool = False):
 
     print(f"\n{'=' * 60}")
     print("💡 This description would be embedded and stored in the vector DB.")
-    print("   A search for any of the topics above would surface this bookmark.")
+    print("   Tags would be stored for exact-match filtering.")
     print(f"{'=' * 60}")
 
     return description
