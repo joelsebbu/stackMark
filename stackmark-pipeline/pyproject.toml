@@ -5,7 +5,6 @@ description = "StackMark — Barebone ingestion pipeline prototype"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "xai-sdk",
     "python-dotenv",
     "requests",
     "openai>=2.29.0",

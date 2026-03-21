@@ -1,7 +1,8 @@
 """StackMark — Barebone Ingestion Pipeline Prototype
 
-Takes a tweet URL → uses xAI Grok's x_search to fetch content →
-generates a search-optimized description via Grok.
+Takes a tweet URL → fetches content via Twitter API v2 →
+sends text + media to Grok vision model for analysis →
+generates a search-optimized description.
 Uses cheap model first, escalates to expensive model if media is detected
 and model reports low confidence. Use --rich flag to force expensive model.
 
@@ -21,9 +22,7 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 from openai import OpenAI
-from xai_sdk import Client
-from xai_sdk.chat import user
-from xai_sdk.tools import x_search
+
 
 # Local imports
 from constants import (
@@ -34,14 +33,14 @@ from constants import (
     OPENROUTER_BASE_URL,
     REQUEST_TIMEOUT,
     X_API_BASE_URL,
+    XAI_API_BASE_URL,
     X_URL_PATTERN,
 )
-from prompts import ENRICHMENT_PROMPT, QUOTE_DETECTION_PROMPT
+from prompts import ENRICHMENT_PROMPT
 from utils import (
     as_list,
     clean_response_json_text,
     dedupe,
-    normalize_status_url,
     pick_media_type,
 )
 
@@ -50,23 +49,17 @@ load_dotenv()
 
 # ─── Global State ───────────────────────────────────────────────────────────
 
-# Embedding client (initialized lazily)
+# Clients (initialized lazily)
 _embedding_client: OpenAI | None = None
+_xai_client: OpenAI | None = None
 
-# xAI API key (required for LLM calls)
+# API keys
 x_api_key = os.getenv("XAI_API_KEY")
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 x_api_bearer_token = os.getenv("X_API_BEARER_TOKEN")
 
 def _get_embedding_client() -> OpenAI:
-    """Get or initialize the OpenRouter embedding client.
-
-    Returns:
-        Initialized OpenAI client configured for OpenRouter.
-
-    Raises:
-        SystemExit: If OPENROUTER_API_KEY is not configured.
-    """
+    """Get or initialize the OpenRouter embedding client."""
     global _embedding_client
 
     if _embedding_client is None:
@@ -76,6 +69,116 @@ def _get_embedding_client() -> OpenAI:
         _embedding_client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=openrouter_api_key)
 
     return _embedding_client
+
+
+def _get_xai_client() -> OpenAI:
+    """Get or initialize the xAI client (OpenAI-compatible)."""
+    global _xai_client
+
+    if _xai_client is None:
+        if not x_api_key:
+            print("❌ Error: XAI_API_KEY not set in environment.")
+            sys.exit(1)
+        _xai_client = OpenAI(base_url=XAI_API_BASE_URL, api_key=x_api_key)
+
+    return _xai_client
+
+
+# ─── Twitter API ─────────────────────────────────────────────────────────────
+
+
+def fetch_tweet(tweet_id: str) -> dict[str, Any]:
+    """Fetch tweet data from Twitter API v2 including media and author info.
+
+    Args:
+        tweet_id: The numeric tweet ID.
+
+    Returns:
+        Raw JSON response from the Twitter API v2.
+
+    Raises:
+        requests.HTTPError: If the API call fails.
+    """
+    endpoint = f"{X_API_BASE_URL}/tweets/{tweet_id}"
+    params = {
+        "expansions": "attachments.media_keys,author_id",
+        "media.fields": "type,url,preview_image_url,width,height,duration_ms,variants,alt_text",
+        "tweet.fields": "text,created_at,attachments,author_id",
+        "user.fields": "name,username",
+    }
+    headers = {"Authorization": f"Bearer {x_api_bearer_token}"}
+    resp = requests.get(endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _best_video_url(variants: list[dict]) -> str | None:
+    """Pick the highest-bitrate MP4 variant."""
+    mp4s = [v for v in variants if v.get("content_type") == "video/mp4"]
+    if mp4s:
+        return max(mp4s, key=lambda v: v.get("bitrate", 0))["url"]
+    return variants[0]["url"] if variants else None
+
+
+def extract_media(tweet_data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract media items from tweet API response.
+
+    Each media item has:
+      type        - "photo" | "video" | "animated_gif"
+      url         - image URL (preview frame for video/gif)
+      video_url   - direct MP4 URL if available
+      is_preview  - True when url is a preview frame
+    """
+    media_items = []
+
+    for media in tweet_data.get("includes", {}).get("media", []):
+        mtype = media["type"]
+        if mtype == "photo":
+            media_items.append({
+                "type": "photo",
+                "url": media["url"],
+                "video_url": None,
+                "is_preview": False,
+            })
+        elif mtype == "animated_gif":
+            media_items.append({
+                "type": "animated_gif",
+                "url": media.get("url") or media.get("preview_image_url"),
+                "video_url": _best_video_url(media.get("variants", [])),
+                "is_preview": not media.get("url"),
+            })
+        elif mtype == "video":
+            media_items.append({
+                "type": "video",
+                "url": media.get("preview_image_url"),
+                "video_url": _best_video_url(media.get("variants", [])),
+                "is_preview": True,
+            })
+
+    return media_items
+
+
+def build_vision_messages(
+    tweet_text: str, media_items: list[dict], prompt: str
+) -> list[dict[str, Any]]:
+    """Build multimodal messages with images for vision model.
+
+    Constructs an OpenAI-compatible message list with image_url content
+    blocks so the model can actually see the media.
+    """
+    content: list[dict[str, Any]] = []
+
+    for item in media_items:
+        if not item.get("url"):
+            continue
+        label = item["type"].upper()
+        if item["is_preview"]:
+            label += " (preview frame — original is a video/GIF)"
+        content.append({"type": "text", "text": f"[{label}]"})
+        content.append({"type": "image_url", "image_url": {"url": item["url"]}})
+
+    content.append({"type": "text", "text": f'Tweet text: "{tweet_text}"\n\n{prompt}'})
+    return [{"role": "user", "content": content}]
 
 
 # ─── Source Classification ────────────────────────────────────────────────────
@@ -213,66 +316,6 @@ def parse_quoted_tweet_from_x_api_payload(payload: dict[str, Any]) -> dict[str, 
         "detection_source": "x_api",
     }
 
-
-def detect_quoted_tweet_with_llm(
-    client: Client, url_info: dict[str, Any]
-) -> dict[str, Any]:
-    """Fallback quote detection using Grok + x_search.
-
-    Uses LLM to analyze tweet content and determine if it's a quote tweet.
-    This is used when the X API is unavailable or fails.
-
-    Args:
-        client: Initialized xAI SDK client.
-        url_info: URL classification dict with 'url' key.
-
-    Returns:
-        Dictionary with keys:
-        - is_quote_tweet: Boolean from LLM analysis
-        - quoted_tweet_url: Extracted URL (normalized)
-        - quoted_tweet_id: Extracted ID
-        - quoted_username: Extracted username (cleaned)
-        - detection_source: Always 'x_search_llm' for this function
-        - parse_error: Boolean if JSON parsing failed
-    """
-    chat = client.chat.create(
-        model=MODEL_CHEAP,
-        tools=[x_search()],
-    )
-    chat.append(user(QUOTE_DETECTION_PROMPT.format(url=url_info["url"])))
-
-    response = chat.sample()
-    result_text = clean_response_json_text(response.content)
-
-    try:
-        result = json.loads(result_text)
-    except json.JSONDecodeError:
-        return {
-            "is_quote_tweet": False,
-            "quoted_tweet_url": "",
-            "quoted_tweet_id": "",
-            "quoted_username": "",
-            "parse_error": True,
-        }
-
-    # Normalize and clean extracted values
-    quoted_url = normalize_status_url(str(result.get("quoted_tweet_url", "")))
-    quoted_id = str(result.get("quoted_tweet_id", "") or "").strip()
-    quoted_username = str(result.get("quoted_username", "") or "").strip().lstrip("@")
-
-    # Reconstruct URL if we have ID and username but no URL
-    if not quoted_url and quoted_id and quoted_username:
-        quoted_url = f"https://x.com/{quoted_username}/status/{quoted_id}"
-
-    return {
-        "is_quote_tweet": bool(result.get("is_quote_tweet", False)),
-        "quoted_tweet_url": quoted_url,
-        "quoted_tweet_id": quoted_id,
-        "quoted_username": quoted_username,
-        "detection_source": "x_search_llm",
-    }
-
-
 def detect_quoted_tweet_with_x_api(url_info: dict[str, Any]) -> dict[str, Any]:
     """Primary quote detection using deterministic X API v2 metadata.
 
@@ -345,30 +388,23 @@ def detect_quoted_tweet_with_x_api(url_info: dict[str, Any]) -> dict[str, Any]:
     return parse_quoted_tweet_from_x_api_payload(payload)
 
 
-def detect_quoted_tweet(client: Client, url_info: dict[str, Any]) -> dict[str, Any]:
-    """Detect quoted tweet, preferring deterministic X API and falling back to LLM.
-
-    This is the main entry point for quote detection. It first tries the X API
-    for reliable metadata-based detection. If that fails (e.g., token not set,
-    API error), it falls back to LLM-based detection using x_search.
+def detect_quoted_tweet(url_info: dict[str, Any]) -> dict[str, Any]:
+    """Detect quoted tweet using X API v2 metadata.
 
     Args:
-        client: Initialized xAI SDK client (for fallback).
         url_info: URL classification dict.
 
     Returns:
-        Dictionary with quote tweet metadata from either source.
+        Dictionary with quote tweet metadata.
     """
     print("\n🔎 Detecting whether this tweet quotes another tweet...")
 
     api_result = detect_quoted_tweet_with_x_api(url_info)
-    if not api_result.get("error"):
+    if api_result.get("error"):
+        print(f"   X API detection error: {api_result.get('error')}")
+    else:
         print("   Detection source: X API v2")
-        return api_result
-
-    print(f"   X API detection unavailable: {api_result.get('error')}")
-    print("   Falling back to x_search-based detection...")
-    return detect_quoted_tweet_with_llm(client, url_info)
+    return api_result
 
 
 # ─── Content Enrichment ───────────────────────────────────────────────────────
@@ -447,18 +483,19 @@ def merge_bookmark_records(
 
 
 def fetch_and_describe(
-    client: Client, url_info: dict[str, Any], use_rich_model: bool = False
+    tweet_data: dict[str, Any],
+    url_info: dict[str, Any],
+    use_rich_model: bool = False,
 ) -> dict[str, Any]:
-    """Fetch tweet content AND generate description in one Grok call.
+    """Analyze tweet content using Grok vision model.
 
-    Uses x_search tool to fetch tweet content, then prompts Grok to analyze
-    and return structured enrichment data. Supports two models: cheap (fast)
-    and rich (thorough media analysis with video/image understanding).
+    Sends tweet text and media (as image URLs) directly to Grok so the model
+    can actually see images/video frames rather than relying on x_search summaries.
 
     Args:
-        client: Initialized xAI SDK client.
+        tweet_data: Raw Twitter API v2 response for the tweet.
         url_info: URL classification dict with 'url' key.
-        use_rich_model: If True, use expensive model with full media analysis.
+        use_rich_model: If True, use expensive model for better analysis.
 
     Returns:
         Dictionary with enrichment fields, or {'parse_error': True, 'raw_response': ...}
@@ -469,35 +506,26 @@ def fetch_and_describe(
     if use_rich_model:
         print(f"\n🔬 Re-analyzing with rich model (media detected)...")
     else:
-        print(f"\n📡 Fetching tweet and generating description...")
+        print(f"\n📡 Analyzing tweet content...")
     print(f"   Model: {model}")
     username = url_info.get("username", "")
     if username:
         print(f"   User: @{username}")
-    else:
-        print("   User: (unknown)")
     print(f"   Tweet ID: {url_info['tweet_id']}")
 
-    # Configure tools based on model choice
-    if use_rich_model:
-        tools = [
-            x_search(
-                enable_image_understanding=True,
-                enable_video_understanding=True,
-            )
-        ]
-    else:
-        tools = [x_search()]
+    tweet_text = tweet_data.get("data", {}).get("text", "")
+    media_items = extract_media(tweet_data)
 
-    chat = client.chat.create(
-        model=model,
-        tools=tools,
-    )
+    if media_items:
+        for item in media_items:
+            tag = " [preview frame]" if item["is_preview"] else ""
+            print(f"   Media: {item['type']}{tag}")
 
-    chat.append(user(ENRICHMENT_PROMPT.format(url=url_info["url"])))
+    messages = build_vision_messages(tweet_text, media_items, ENRICHMENT_PROMPT)
 
-    response = chat.sample()
-    result_text = clean_response_json_text(response.content)
+    client = _get_xai_client()
+    response = client.chat.completions.create(model=model, messages=messages)  # type: ignore[arg-type]
+    result_text = clean_response_json_text(response.choices[0].message.content or "")
 
     try:
         return json.loads(result_text)
@@ -506,15 +534,18 @@ def fetch_and_describe(
 
 
 def enrich_tweet_with_escalation(
-    client: Client, url_info: dict[str, Any], force_rich: bool = False
+    tweet_data: dict[str, Any],
+    url_info: dict[str, Any],
+    force_rich: bool = False,
 ) -> dict[str, Any]:
-    """Fetch and enrich a tweet with cheap->rich escalation when needed.
+    """Enrich a tweet with cheap->rich model escalation when needed.
 
-    First attempts with the cheap model. If media is detected with low confidence,
-    automatically escalates to the rich model for better analysis.
+    Auto-escalates to rich model for video tweets (since we can only send
+    a preview frame, the rich model does better with limited visual info).
+    For images, the cheap model seeing the actual image is sufficient.
 
     Args:
-        client: Initialized xAI SDK client.
+        tweet_data: Raw Twitter API v2 response for the tweet.
         url_info: URL classification dict.
         force_rich: If True, skip cheap model and use rich model directly.
 
@@ -523,24 +554,18 @@ def enrich_tweet_with_escalation(
     """
     if force_rich:
         print("\n🔬 Forced rich model via --rich flag.")
-        return fetch_and_describe(client, url_info, use_rich_model=True)
+        return fetch_and_describe(tweet_data, url_info, use_rich_model=True)
 
-    description = fetch_and_describe(client, url_info, use_rich_model=False)
+    # Auto-escalate for videos — we only have a preview frame, so the
+    # rich model's stronger reasoning helps fill in the gaps.
+    media_items = extract_media(tweet_data)
+    has_video = any(m["type"] in ("video", "animated_gif") for m in media_items)
 
-    if not description.get("parse_error"):
-        has_media = description.get("has_media", False)
-        confidence = str(description.get("media_confidence", "high")).lower()
+    if has_video:
+        print("\n🔬 Video detected — using rich model (preview frame only).")
+        return fetch_and_describe(tweet_data, url_info, use_rich_model=True)
 
-        if confidence == "low" and has_media:
-            print("\n⚠️  Model reported low confidence and tweet has media.")
-            print("   Escalating to rich model for better analysis...")
-            description = fetch_and_describe(client, url_info, use_rich_model=True)
-        elif confidence == "low":
-            print("\n📝 Low confidence but no media — keeping as-is.")
-        else:
-            print("\n✅ High confidence from cheap model.")
-
-    return description
+    return fetch_and_describe(tweet_data, url_info, use_rich_model=False)
 
 
 # ─── Main Pipeline ────────────────────────────────────────────────────────────
@@ -564,12 +589,14 @@ def run_pipeline(url: str, force_rich: bool = False) -> dict[str, Any]:
         SystemExit: If XAI_API_KEY is not configured or source is unsupported.
     """
     
-    if not x_api_key:
-        print("❌ Error: Set your XAI_API_KEY environment variable.")
-        print("   Add your key to the .env file.")
+    missing = [k for k, v in {
+        "XAI_API_KEY": x_api_key,
+        "X_API_BEARER_TOKEN": x_api_bearer_token,
+    }.items() if not v]
+    if missing:
+        print(f"❌ Error: Missing env vars: {', '.join(missing)}")
+        print("   Add your keys to the .env file.")
         sys.exit(1)
-
-    client = Client(api_key=x_api_key)
 
     # ── Step 1: Classify ──
     print("=" * 60)
@@ -585,11 +612,23 @@ def run_pipeline(url: str, force_rich: bool = False) -> dict[str, Any]:
         print("\n❌ Only X/Twitter URLs are supported in this prototype.")
         sys.exit(1)
 
-    # ── Step 2+3: Fetch & Describe main tweet ──
-    description = enrich_tweet_with_escalation(client, url_info, force_rich=force_rich)
+    # ── Step 2: Fetch tweet data from Twitter API ──
+    print(f"\n📡 Fetching tweet {url_info['tweet_id']} from Twitter API...")
+    try:
+        tweet_data = fetch_tweet(url_info["tweet_id"])
+    except requests.HTTPError as exc:
+        print(f"\n❌ Failed to fetch tweet: {exc}")
+        sys.exit(1)
+
+    author = tweet_data.get("includes", {}).get("users", [{}])[0]
+    print(f"   Author: @{author.get('username', 'unknown')} ({author.get('name', '')})")
+    print(f"   Text: {tweet_data.get('data', {}).get('text', '')[:120]}...")
+
+    # ── Step 3: Analyze with vision model ──
+    description = enrich_tweet_with_escalation(tweet_data, url_info, force_rich=force_rich)
 
     # ── Step 4: Detect and merge quoted tweet ──
-    quote_result = detect_quoted_tweet(client, url_info)
+    quote_result = detect_quoted_tweet(url_info)
     quote_url = quote_result.get("quoted_tweet_url", "")
     quote_id = quote_result.get("quoted_tweet_id", "")
     if not quote_url and quote_id:
@@ -603,11 +642,20 @@ def run_pipeline(url: str, force_rich: bool = False) -> dict[str, Any]:
         quoted_url_info = classify_url(quote_url)
 
         if quoted_url_info.get("source") == "x":
-            quoted_description = enrich_tweet_with_escalation(
-                client,
-                quoted_url_info,
-                force_rich=force_rich,
-            )
+            try:
+                quoted_tweet_data = fetch_tweet(quoted_url_info["tweet_id"])
+            except requests.HTTPError as exc:
+                print(f"\n⚠️  Could not fetch quoted tweet: {exc}")
+                quoted_tweet_data = None
+
+            if quoted_tweet_data is None:
+                quoted_description = {"parse_error": True}
+            else:
+                quoted_description = enrich_tweet_with_escalation(
+                    quoted_tweet_data,
+                    quoted_url_info,
+                    force_rich=force_rich,
+                )
             if quoted_description.get("parse_error"):
                 print(
                     "\n⚠️  Could not parse quoted tweet enrichment JSON. Keeping main tweet result."

@@ -1,23 +1,21 @@
 """LLM prompts for the StackMark ingestion pipeline.
 
-This module contains all LLM prompts used for content enrichment and analysis.
-Prompts are parameterized using Python's str.format() method.
+This module contains the enrichment prompt used for content analysis.
+The prompt is appended after any media content in the multimodal message.
 """
 
 ENRICHMENT_PROMPT = """\
 You are a bookmark indexer for StackMark, a personal bookmark manager.
 
-Find the tweet at the URL below using x_search. Analyze ALL content — text, \
-images, videos, text overlays, captions baked into media. Then return a JSON \
-object whose description field will be converted into a vector embedding for \
+Analyze ALL content above — the tweet text, any images, video frames, \
+text overlays, and captions baked into media. Then return a JSON object \
+whose description field will be converted into a vector embedding for \
 cosine similarity search.
-
-Tweet URL: {url}
 
 Return ONLY a valid JSON object (no markdown fences, no extra text) with \
 these fields:
 
-{{
+{
   "description": "A dense, keyword-rich block of text that captures \
 everything someone might search to find this content later. Front-load \
 named entities and concrete nouns. Include synonyms and related terms \
@@ -49,12 +47,12 @@ technologies, places mentioned or shown"],
   "media_type": "none | image | video | gif",
 
   "media_confidence": "high or low (see rules below)"
-}}
+}
 
 RULES:
 
-1. MEDIA ANALYSIS: ACTUALLY WATCH any video and LOOK AT any images. \
-If there's text overlay or captions baked into video frames or images, \
+1. MEDIA ANALYSIS: Carefully examine any images or video frames provided \
+above. If there's text overlay or captions baked into the media, \
 transcribe them into the description.
 
 2. SPECIFICITY: Use exact names. "Po from Kung Fu Panda" not "animated \
@@ -67,44 +65,13 @@ someone searches any reasonable phrase to find this content, at least \
 one phrase in the description should be a near-match.
 
 4. MEDIA CONFIDENCE:
-   - "high" = you viewed and can describe the actual visual content
-   - "low" = the tweet has media you could not analyze, OR your \
-description is mostly based on metadata (handle name, reply context, \
-engagement) rather than actual content
+   - "high" = you can see and describe the actual visual content
+   - "low" = images were not provided or you cannot make out the content
    - Text-only tweets with no media = always "high"
 
-5. UNAVAILABLE CONTENT: If the tweet is deleted, private, or \
-inaccessible, return:
-   {{"description": "", "tags": [], "content_type": "other", \
-"mood": [], "entities": [], "has_media": false, "media_type": "none", \
-"media_confidence": "low"}}
+5. has_media must be true if images or video frames were provided above.
 
-6. has_media must be true if the tweet contains ANY image, video, or gif.
+6. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
 
-7. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
-
-8. Return ONLY the JSON object.
-"""
-
-QUOTE_DETECTION_PROMPT = """\
-You are a tweet relationship analyzer.
-
-Find the tweet at the URL below using x_search. Determine whether the tweet is a
-quote tweet (a tweet that quotes another tweet).
-
-Tweet URL: {url}
-
-Return ONLY a valid JSON object with these fields:
-{{
-  "is_quote_tweet": true or false,
-  "quoted_tweet_url": "full quoted tweet URL or empty string",
-  "quoted_tweet_id": "numeric ID or empty string",
-  "quoted_username": "username without @ or empty string"
-}}
-
-RULES:
-1. If the tweet is not a quote tweet, return false and empty strings.
-2. If it is a quote tweet, fill as many quoted fields as you can.
-3. quoted_tweet_url should be canonical when possible: https://x.com/<username>/status/<id>
-4. Return ONLY the JSON object.
+7. Return ONLY the JSON object.
 """

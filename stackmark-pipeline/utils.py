@@ -4,10 +4,9 @@ This module contains helper functions for text processing, data normalization,
 and media type handling.
 """
 
-import re
 from typing import Any
 
-from constants import MEDIA_TYPE_PRIORITY, X_STATUS_URL_NORMALIZE_PATTERN
+from constants import MEDIA_TYPE_PRIORITY
 
 
 def clean_response_json_text(result_text: str) -> str:
@@ -68,23 +67,6 @@ def dedupe(items: list[str]) -> list[str]:
             result.append(item)
     return result
 
-
-def normalize_status_url(url: str) -> str:
-    """Normalize X/Twitter status URL to canonical form.
-
-    Extracts username and tweet ID from various X/Twitter URL formats
-    and returns a canonical https://x.com/<username>/status/<id> URL.
-
-    Args:
-        url: Raw URL string (may be from various sources, possibly None).
-
-    Returns:
-        Canonical X status URL, or empty string if not parseable.
-    """
-    match = re.search(X_STATUS_URL_NORMALIZE_PATTERN, url or "")
-    if not match:
-        return ""
-    return f"https://x.com/{match.group(1)}/status/{match.group(2)}"
 
 
 def pick_media_type(main_media_type: str, quoted_media_type: str) -> str:
