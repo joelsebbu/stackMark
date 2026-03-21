@@ -6,7 +6,7 @@ and media type handling.
 
 from typing import Any
 
-from constants import MEDIA_TYPE_PRIORITY
+from .constants import MEDIA_TYPE_PRIORITY
 
 
 def clean_response_json_text(result_text: str) -> str:

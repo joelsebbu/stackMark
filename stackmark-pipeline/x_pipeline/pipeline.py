@@ -5,7 +5,7 @@ sends text + media to Gemini vision model for analysis →
 generates a search-optimized description and embedding.
 
 Usage:
-    uv run pipeline.py "https://x.com/someone/status/123456"
+    uv run -m x_pipeline.pipeline "https://x.com/someone/status/123456"
 """
 
 # Standard library imports
@@ -22,7 +22,7 @@ from openai import OpenAI
 
 
 # Local imports
-from constants import (
+from .constants import (
     EMBEDDING_DIMENSIONS,
     EMBEDDING_MODEL,
     OPENROUTER_BASE_URL,
@@ -31,8 +31,8 @@ from constants import (
     X_API_BASE_URL,
     X_URL_PATTERN,
 )
-from prompts import ENRICHMENT_PROMPT, VIDEO_TRIAGE_PROMPT
-from utils import (
+from .prompts import ENRICHMENT_PROMPT, VIDEO_TRIAGE_PROMPT
+from .utils import (
     as_list,
     clean_response_json_text,
     dedupe,
