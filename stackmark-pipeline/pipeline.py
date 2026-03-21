@@ -1,14 +1,11 @@
 """StackMark — Barebone Ingestion Pipeline Prototype
 
 Takes a tweet URL → fetches content via Twitter API v2 →
-sends text + media to Grok vision model for analysis →
-generates a search-optimized description.
-Uses cheap model first, escalates to expensive model if media is detected
-and model reports low confidence. Use --rich flag to force expensive model.
+sends text + media to Gemini vision model for analysis →
+generates a search-optimized description and embedding.
 
 Usage:
     uv run pipeline.py "https://x.com/someone/status/123456"
-    uv run pipeline.py "https://x.com/someone/status/123456" --rich
 """
 
 # Standard library imports
@@ -28,15 +25,13 @@ from openai import OpenAI
 from constants import (
     EMBEDDING_DIMENSIONS,
     EMBEDDING_MODEL,
-    MODEL_CHEAP,
-    MODEL_RICH,
     OPENROUTER_BASE_URL,
     REQUEST_TIMEOUT,
+    X_PIPELINE_MODEL,
     X_API_BASE_URL,
-    XAI_API_BASE_URL,
     X_URL_PATTERN,
 )
-from prompts import ENRICHMENT_PROMPT
+from prompts import ENRICHMENT_PROMPT, VIDEO_TRIAGE_PROMPT
 from utils import (
     as_list,
     clean_response_json_text,
@@ -49,39 +44,24 @@ load_dotenv()
 
 # ─── Global State ───────────────────────────────────────────────────────────
 
-# Clients (initialized lazily)
-_embedding_client: OpenAI | None = None
-_xai_client: OpenAI | None = None
+# OpenRouter client (initialized lazily, used for both vision and embeddings)
+_openrouter_client: OpenAI | None = None
 
 # API keys
-x_api_key = os.getenv("XAI_API_KEY")
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 x_api_bearer_token = os.getenv("X_API_BEARER_TOKEN")
 
-def _get_embedding_client() -> OpenAI:
-    """Get or initialize the OpenRouter embedding client."""
-    global _embedding_client
+def _get_openrouter_client() -> OpenAI:
+    """Get or initialize the OpenRouter client."""
+    global _openrouter_client
 
-    if _embedding_client is None:
+    if _openrouter_client is None:
         if not openrouter_api_key:
             print("❌ Error: OPENROUTER_API_KEY not set in environment.")
             sys.exit(1)
-        _embedding_client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=openrouter_api_key)
+        _openrouter_client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=openrouter_api_key)
 
-    return _embedding_client
-
-
-def _get_xai_client() -> OpenAI:
-    """Get or initialize the xAI client (OpenAI-compatible)."""
-    global _xai_client
-
-    if _xai_client is None:
-        if not x_api_key:
-            print("❌ Error: XAI_API_KEY not set in environment.")
-            sys.exit(1)
-        _xai_client = OpenAI(base_url=XAI_API_BASE_URL, api_key=x_api_key)
-
-    return _xai_client
+    return _openrouter_client
 
 
 # ─── Twitter API ─────────────────────────────────────────────────────────────
@@ -110,6 +90,38 @@ def fetch_tweet(tweet_id: str) -> dict[str, Any]:
     resp = requests.get(endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
     return resp.json()
+
+
+def fetch_replies(tweet_id: str, max_results: int = 10) -> list[str]:
+    """Fetch top replies to a tweet via Twitter API v2 search.
+
+    Uses the recent search endpoint to find replies to the given tweet.
+    Only called for video tweets to provide extra context for triage.
+
+    Args:
+        tweet_id: The numeric tweet ID to find replies for.
+        max_results: Maximum number of replies to fetch (10-100).
+
+    Returns:
+        List of reply text strings. Empty list on failure.
+    """
+    endpoint = f"{X_API_BASE_URL}/tweets/search/recent"
+    params = {
+        "query": f"conversation_id:{tweet_id} is:reply",
+        "tweet.fields": "text,public_metrics",
+        "max_results": max(10, min(max_results, 100)),
+        "sort_order": "relevancy",
+    }
+    headers = {"Authorization": f"Bearer {x_api_bearer_token}"}
+
+    try:
+        resp = requests.get(endpoint, headers=headers, params=params, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return []
+
+    data = resp.json().get("data", [])
+    return [tweet["text"] for tweet in data if tweet.get("text")]
 
 
 def _best_video_url(variants: list[dict]) -> str | None:
@@ -161,21 +173,17 @@ def extract_media(tweet_data: dict[str, Any]) -> list[dict[str, Any]]:
 def build_vision_messages(
     tweet_text: str, media_items: list[dict], prompt: str
 ) -> list[dict[str, Any]]:
-    """Build multimodal messages with images for vision model.
+    """Build multimodal messages with images for the non-video path.
 
     Constructs an OpenAI-compatible message list with image_url content
-    blocks so the model can actually see the media.
+    blocks. Only used for photos — videos go through the triage path.
     """
     content: list[dict[str, Any]] = []
 
     for item in media_items:
-        if not item.get("url"):
-            continue
-        label = item["type"].upper()
-        if item["is_preview"]:
-            label += " (preview frame — original is a video/GIF)"
-        content.append({"type": "text", "text": f"[{label}]"})
-        content.append({"type": "image_url", "image_url": {"url": item["url"]}})
+        if item.get("url") and item["type"] == "photo":
+            content.append({"type": "text", "text": f"[{item['type'].upper()}]"})
+            content.append({"type": "image_url", "image_url": {"url": item["url"]}})
 
     content.append({"type": "text", "text": f'Tweet text: "{tweet_text}"\n\n{prompt}'})
     return [{"role": "user", "content": content}]
@@ -227,7 +235,7 @@ def generate_embedding(text: str) -> list[float]:
     Returns:
         List of float values representing the embedding vector.
     """
-    client = _get_embedding_client()
+    client = _get_openrouter_client()
 
     response = client.embeddings.create(
         model=EMBEDDING_MODEL,
@@ -482,32 +490,70 @@ def merge_bookmark_records(
     }
 
 
-def fetch_and_describe(
+def _has_video(media_items: list[dict[str, Any]]) -> bool:
+    """Check if any media item is a video or animated GIF."""
+    return any(item["type"] in ("video", "animated_gif") for item in media_items)
+
+
+def _build_video_triage_messages(
+    tweet_text: str,
+    preview_url: str | None,
+    replies: list[str],
+    prompt: str,
+) -> list[dict[str, Any]]:
+    """Build messages for video triage: text + preview frame + replies."""
+    content: list[dict[str, Any]] = []
+
+    if preview_url:
+        content.append({"type": "text", "text": "[VIDEO PREVIEW FRAME]"})
+        content.append({"type": "image_url", "image_url": {"url": preview_url}})
+
+    replies_text = ""
+    if replies:
+        replies_text = "\n\nTop replies:\n" + "\n".join(
+            f"- {reply}" for reply in replies
+        )
+
+    content.append({
+        "type": "text",
+        "text": f'Tweet text: "{tweet_text}"{replies_text}\n\n{prompt}',
+    })
+    return [{"role": "user", "content": content}]
+
+
+def _call_llm(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    """Send messages to Gemini via OpenRouter and parse the JSON response."""
+    client = _get_openrouter_client()
+    response = client.chat.completions.create(model=X_PIPELINE_MODEL, messages=messages)  # type: ignore[arg-type]
+    result_text = clean_response_json_text(response.choices[0].message.content or "")
+
+    try:
+        return json.loads(result_text)
+    except json.JSONDecodeError:
+        return {"raw_response": result_text, "parse_error": True}
+
+
+def enrich_tweet(
     tweet_data: dict[str, Any],
     url_info: dict[str, Any],
-    use_rich_model: bool = False,
 ) -> dict[str, Any]:
-    """Analyze tweet content using Grok vision model.
+    """Analyze tweet content using Gemini via OpenRouter.
 
-    Sends tweet text and media (as image URLs) directly to Grok so the model
-    can actually see images/video frames rather than relying on x_search summaries.
+    For tweets without video: sends text + images directly.
+    For video tweets: sends text + preview frame + top replies and asks
+    the model to decide if it has enough context. If not, flags the tweet
+    with needs_video_review: true.
 
     Args:
         tweet_data: Raw Twitter API v2 response for the tweet.
-        url_info: URL classification dict with 'url' key.
-        use_rich_model: If True, use expensive model for better analysis.
+        url_info: URL classification dict.
 
     Returns:
-        Dictionary with enrichment fields, or {'parse_error': True, 'raw_response': ...}
-        if the LLM response couldn't be parsed as JSON.
+        Enrichment dict, or dict with 'needs_video_review': True,
+        or dict with 'parse_error': True on failure.
     """
-    model = MODEL_RICH if use_rich_model else MODEL_CHEAP
-
-    if use_rich_model:
-        print(f"\n🔬 Re-analyzing with rich model (media detected)...")
-    else:
-        print(f"\n📡 Analyzing tweet content...")
-    print(f"   Model: {model}")
+    print(f"\n📡 Analyzing tweet content...")
+    print(f"   Model: {X_PIPELINE_MODEL}")
     username = url_info.get("username", "")
     if username:
         print(f"   User: @{username}")
@@ -518,79 +564,71 @@ def fetch_and_describe(
 
     if media_items:
         for item in media_items:
-            tag = " [preview frame]" if item["is_preview"] else ""
-            print(f"   Media: {item['type']}{tag}")
+            if item.get("video_url") and item["type"] in ("video", "animated_gif"):
+                print(f"   Media: {item['type']} (video)")
+            else:
+                print(f"   Media: {item['type']}")
 
+    # ── Video triage path ──
+    if _has_video(media_items):
+        print("\n🎬 Video detected — triaging with text + preview + replies...")
+
+        # Get preview frame from the first video/gif item
+        preview_url = None
+        for item in media_items:
+            if item["type"] in ("video", "animated_gif") and item.get("url"):
+                preview_url = item["url"]
+                break
+
+        # Fetch replies for extra context
+        tweet_id = url_info.get("tweet_id", "")
+        replies = fetch_replies(tweet_id)
+        if replies:
+            print(f"   Fetched {len(replies)} replies for context")
+        else:
+            print("   No replies found")
+
+        messages = _build_video_triage_messages(
+            tweet_text, preview_url, replies, VIDEO_TRIAGE_PROMPT
+        )
+        result = _call_llm(messages)
+
+        if result.get("needs_video_review"):
+            print("   ⏸️  Model needs video review — flagging for later")
+            return {"needs_video_review": True, "tweet_id": url_info["tweet_id"]}
+
+        if result.get("parse_error"):
+            return result
+
+        print("   ✅ Model produced description from context alone")
+        return result
+
+    # ── Standard path (text + images, no video) ──
     messages = build_vision_messages(tweet_text, media_items, ENRICHMENT_PROMPT)
-
-    client = _get_xai_client()
-    response = client.chat.completions.create(model=model, messages=messages)  # type: ignore[arg-type]
-    result_text = clean_response_json_text(response.choices[0].message.content or "")
-
-    try:
-        return json.loads(result_text)
-    except json.JSONDecodeError:
-        return {"raw_response": result_text, "parse_error": True}
-
-
-def enrich_tweet_with_escalation(
-    tweet_data: dict[str, Any],
-    url_info: dict[str, Any],
-    force_rich: bool = False,
-) -> dict[str, Any]:
-    """Enrich a tweet with cheap->rich model escalation when needed.
-
-    Auto-escalates to rich model for video tweets (since we can only send
-    a preview frame, the rich model does better with limited visual info).
-    For images, the cheap model seeing the actual image is sufficient.
-
-    Args:
-        tweet_data: Raw Twitter API v2 response for the tweet.
-        url_info: URL classification dict.
-        force_rich: If True, skip cheap model and use rich model directly.
-
-    Returns:
-        Enrichment dictionary from either cheap or rich model analysis.
-    """
-    if force_rich:
-        print("\n🔬 Forced rich model via --rich flag.")
-        return fetch_and_describe(tweet_data, url_info, use_rich_model=True)
-
-    # Auto-escalate for videos — we only have a preview frame, so the
-    # rich model's stronger reasoning helps fill in the gaps.
-    media_items = extract_media(tweet_data)
-    has_video = any(m["type"] in ("video", "animated_gif") for m in media_items)
-
-    if has_video:
-        print("\n🔬 Video detected — using rich model (preview frame only).")
-        return fetch_and_describe(tweet_data, url_info, use_rich_model=True)
-
-    return fetch_and_describe(tweet_data, url_info, use_rich_model=False)
+    return _call_llm(messages)
 
 
 # ─── Main Pipeline ────────────────────────────────────────────────────────────
 
 
-def run_pipeline(url: str, force_rich: bool = False) -> dict[str, Any]:
+def run_pipeline(url: str) -> dict[str, Any]:
     """Run the full ingestion pipeline on a URL.
 
     Orchestrates the complete flow: classification, content fetching,
-    enrichment (with model escalation), quote detection and merging,
+    enrichment via Gemini, quote detection and merging,
     and finally embedding generation.
 
     Args:
         url: The tweet URL to process.
-        force_rich: If True, skip cheap model and use rich model directly.
 
     Returns:
         Dictionary containing all enrichment data and the embedding vector.
 
     Raises:
-        SystemExit: If XAI_API_KEY is not configured or source is unsupported.
+        SystemExit: If required env vars are not configured or source is unsupported.
     """
-    
     missing = [k for k, v in {
-        "XAI_API_KEY": x_api_key,
+        "OPENROUTER_API_KEY": openrouter_api_key,
         "X_API_BEARER_TOKEN": x_api_bearer_token,
     }.items() if not v]
     if missing:
@@ -624,53 +662,62 @@ def run_pipeline(url: str, force_rich: bool = False) -> dict[str, Any]:
     print(f"   Author: @{author.get('username', 'unknown')} ({author.get('name', '')})")
     print(f"   Text: {tweet_data.get('data', {}).get('text', '')[:120]}...")
 
-    # ── Step 3: Analyze with vision model ──
-    description = enrich_tweet_with_escalation(tweet_data, url_info, force_rich=force_rich)
+    # ── Step 3: Analyze with Gemini ──
+    description = enrich_tweet(tweet_data, url_info)
+
+    # Early return if video needs manual review
+    if description.get("needs_video_review"):
+        print(f"\n{'=' * 60}")
+        print("⏸️  PIPELINE OUTPUT — NEEDS VIDEO REVIEW")
+        print(f"{'=' * 60}")
+        print(f"\n   Tweet: {url}")
+        print(f"   Tweet ID: {url_info['tweet_id']}")
+        print("   Status: Flagged for video review — model could not produce")
+        print("           a confident description from text + preview + replies.")
+        print(f"\n{'=' * 60}")
+        return description
 
     # ── Step 4: Detect and merge quoted tweet ──
-    quote_result = detect_quoted_tweet(url_info)
-    quote_url = quote_result.get("quoted_tweet_url", "")
-    quote_id = quote_result.get("quoted_tweet_id", "")
-    if not quote_url and quote_id:
-        quote_url = f"https://x.com/i/web/status/{quote_id}"
-    is_quote = bool(
-        quote_result.get("is_quote_tweet", False) and (quote_url or quote_id)
-    )
-
-    if is_quote and not description.get("parse_error"):
-        print(f"\n🔁 Quote tweet detected: {quote_url}")
-        quoted_url_info = classify_url(quote_url)
-
-        if quoted_url_info.get("source") == "x":
-            try:
-                quoted_tweet_data = fetch_tweet(quoted_url_info["tweet_id"])
-            except requests.HTTPError as exc:
-                print(f"\n⚠️  Could not fetch quoted tweet: {exc}")
-                quoted_tweet_data = None
-
-            if quoted_tweet_data is None:
-                quoted_description = {"parse_error": True}
-            else:
-                quoted_description = enrich_tweet_with_escalation(
-                    quoted_tweet_data,
-                    quoted_url_info,
-                    force_rich=force_rich,
-                )
-            if quoted_description.get("parse_error"):
-                print(
-                    "\n⚠️  Could not parse quoted tweet enrichment JSON. Keeping main tweet result."
-                )
-            else:
-                description = merge_bookmark_records(description, quoted_description)
-                print("\n✅ Merged quoted tweet content into this bookmark record.")
-        else:
-            print("\n⚠️  Quoted tweet URL was not parseable as an X status URL.")
-    elif quote_result.get("parse_error"):
-        print(
-            "\n⚠️  Could not parse quote-detection JSON. Continuing with main tweet only."
+    if not description.get("parse_error"):
+        quote_result = detect_quoted_tweet(url_info)
+        quote_url = quote_result.get("quoted_tweet_url", "")
+        quote_id = quote_result.get("quoted_tweet_id", "")
+        if not quote_url and quote_id:
+            quote_url = f"https://x.com/i/web/status/{quote_id}"
+        is_quote = bool(
+            quote_result.get("is_quote_tweet", False) and (quote_url or quote_id)
         )
-    else:
-        print("\nℹ️  No quoted tweet detected.")
+
+        if is_quote:
+            print(f"\n🔁 Quote tweet detected: {quote_url}")
+            quoted_url_info = classify_url(quote_url)
+
+            if quoted_url_info.get("source") == "x":
+                try:
+                    quoted_tweet_data = fetch_tweet(quoted_url_info["tweet_id"])
+                except requests.HTTPError as exc:
+                    print(f"\n⚠️  Could not fetch quoted tweet: {exc}")
+                    quoted_tweet_data = None
+
+                if quoted_tweet_data is None:
+                    quoted_description = {"parse_error": True}
+                else:
+                    quoted_description = enrich_tweet(
+                        quoted_tweet_data,
+                        quoted_url_info,
+                    )
+
+                if quoted_description.get("needs_video_review"):
+                    print("\n⚠️  Quoted tweet needs video review — skipping merge.")
+                elif quoted_description.get("parse_error"):
+                    print("\n⚠️  Could not parse quoted tweet enrichment. Keeping main tweet result.")
+                else:
+                    description = merge_bookmark_records(description, quoted_description)
+                    print("\n✅ Merged quoted tweet content into this bookmark record.")
+            else:
+                print("\n⚠️  Quoted tweet URL was not parseable as an X status URL.")
+        else:
+            print("\nℹ️  No quoted tweet detected.")
 
     # ── Step 5: Generate Embedding ──
     embedding = None
@@ -724,25 +771,13 @@ def run_pipeline(url: str, force_rich: bool = False) -> dict[str, Any]:
 
 
 def main() -> None:
-    """CLI entry point for the pipeline.
-
-    Parses command line arguments and runs the pipeline.
-    Supports --rich flag to force expensive model usage.
-    """
-    args = sys.argv[1:]
-
-    force_rich = "--rich" in args
-    if force_rich:
-        args.remove("--rich")
-
-    if len(args) < 1:
-        print("Usage: uv run pipeline.py <tweet-url> [--rich]")
+    """CLI entry point for the pipeline."""
+    if len(sys.argv) < 2:
+        print("Usage: uv run pipeline.py <tweet-url>")
         print('Example: uv run pipeline.py "https://x.com/elonmusk/status/123456"')
-        print('         uv run pipeline.py "https://x.com/..." --rich')
         sys.exit(1)
 
-    url = args[0]
-    run_pipeline(url, force_rich=force_rich)
+    run_pipeline(sys.argv[1])
 
 
 if __name__ == "__main__":

@@ -6,11 +6,8 @@ This module contains all hardcoded configuration values including:
 - URL patterns for source classification
 """
 
-# Model configurations for xAI Grok
-MODEL_CHEAP = (
-    "grok-4-1-fast-non-reasoning"  # Fast, cost-effective model for initial analysis
-)
-MODEL_RICH = "grok-4.20-beta-latest-non-reasoning"  # High-quality model for complex media analysis
+# LLM model for X/Twitter pipeline (via OpenRouter)
+X_PIPELINE_MODEL = "google/gemini-2.5-flash-lite"
 
 # Embedding model configuration (via OpenRouter)
 EMBEDDING_MODEL = "qwen/qwen3-embedding-8b"
@@ -19,7 +16,6 @@ EMBEDDING_DIMENSIONS = 1024
 # API endpoints
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 X_API_BASE_URL = "https://api.x.com/2"
-XAI_API_BASE_URL = "https://api.x.ai/v1"
 
 # Request timeouts (seconds)
 REQUEST_TIMEOUT = 15
