@@ -1,7 +1,7 @@
 # StackMark — Ingestion Pipeline Prototype
 
-Barebone prototype of the StackMark ingestion pipeline.  
-Takes a tweet URL → fetches content via Grok's x_search → generates a search-optimized description.
+Barebone prototype of the StackMark ingestion pipeline.
+Takes a tweet URL → fetches content via Twitter API v2 → analyzes with Gemini → generates a search-optimized description and embedding.
 
 ## Setup
 
@@ -9,25 +9,28 @@ Takes a tweet URL → fetches content via Grok's x_search → generates a search
 # 1. Clone / navigate to this folder
 cd stackmark-pipeline
 
-# 2. Set your xAI API key
+# 2. Set your API keys
 cp .env.example .env
-# Edit .env and add your key from https://console.x.ai/team/default/api-keys
-# Optional but recommended: add X_API_BEARER_TOKEN for deterministic quote-tweet detection
+# Edit .env and add:
+#   OPENROUTER_API_KEY  — from https://openrouter.ai/keys
+#   X_API_BEARER_TOKEN  — from https://developer.x.com
 
 # 3. Run it (uv handles venv + deps automatically)
-uv run pipeline.py "https://x.com/someone/status/123456"
+uv run -m x_pipeline.pipeline "https://x.com/someone/status/123456"
 ```
 
 That's it. `uv run` will:
 - Create a `.venv` virtual environment
-- Install `xai-sdk` and all its dependencies
+- Install dependencies (openai, requests, python-dotenv)
 - Run the pipeline
 
 ## What it does
 
 ```
-Tweet URL → Classify → Fetch (x_search) → AI Enrich (Grok) → Detect quote tweet → Merge quoted content → Print output
+Tweet URL → Classify → Fetch (Twitter API v2) → Analyze (Gemini) → Detect quote tweet → Merge quoted content → Generate embedding → Output
 ```
+
+For video tweets, the pipeline triages with the tweet text + preview frame + top replies. If the model can produce a confident description from that context alone, it does. Otherwise, the tweet is flagged with `needs_video_review: true` for later processing.
 
 The output is a JSON payload optimized for vector embedding search:
 
@@ -44,6 +47,22 @@ The output is a JSON payload optimized for vector embedding search:
 }
 ```
 
+## Project structure
+
+```
+stackmark-pipeline/
+├── pyproject.toml
+├── uv.lock
+├── README.md
+└── x_pipeline/
+    ├── __init__.py
+    ├── pipeline.py      # Main pipeline orchestration
+    ├── constants.py     # Model names, API endpoints, config
+    ├── prompts.py       # LLM prompts (enrichment + video triage)
+    ├── utils.py         # Text processing helpers
+    └── tweets.csv       # Sample tweet data
+```
+
 ## Cost
 
-Using `grok-4-1-fast-non-reasoning` — each bookmark costs well under $0.01.
+Using `google/gemini-2.5-flash-lite` via OpenRouter — each bookmark costs well under $0.01.
