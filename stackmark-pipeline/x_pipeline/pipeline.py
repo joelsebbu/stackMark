@@ -38,6 +38,7 @@ from .utils import (
     dedupe,
     pick_media_type,
 )
+from db.operations import insert_embedding
 
 # Load environment variables from .env file
 load_dotenv()
@@ -724,12 +725,23 @@ def run_pipeline(url: str) -> dict[str, Any]:
     if not description.get("parse_error"):
         print("\n🔢 Generating embedding vector...")
         embedding_text = f"{description.get('description', '')} {' '.join(description.get('tags', []))} {' '.join(description.get('entities', []))}"
+        print(f"   Embedding text: {embedding_text}")
         try:
             embedding = generate_embedding(embedding_text)
             print(f"   ✅ Generated embedding: {len(embedding)} dimensions")
         except Exception as e:
             print(f"\n❌ Error generating embedding: {e}")
             sys.exit(1)
+
+    # ── Step 6: Store in database ──
+    if embedding and not description.get("parse_error"):
+        print("\n💾 Storing to database...")
+        record = insert_embedding(
+            source=url_info["source"],
+            url=url,
+            embedding=embedding,
+        )
+        print(f"   ✅ Saved with UUID: {record.uuid}")
 
     # ── Output ──
     print(f"\n{'=' * 60}")
