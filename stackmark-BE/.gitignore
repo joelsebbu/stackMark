@@ -2,3 +2,5 @@
 .env
 __pycache__/
 *.pyc
+instagram_pipeline/downloads/
+instagram_pipeline/session-*
