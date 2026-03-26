@@ -30,6 +30,9 @@ extract_media(tweet_data)
 - `extract_media(tweet_data)` — Parses `includes.media` into typed items (photo/video/animated_gif)
 - `detect_quoted_tweet_with_x_api()` — Checks `referenced_tweets` for `type: "quoted"`
 
+## Database integration
+`run_pipeline()` calls `db.operations.insert_embedding()` at the end to store source, URL, and embedding vector in PostgreSQL. The embedding is also used by `retrieval/` for semantic search.
+
 ## Prompt rules
 Both prompts have anti-hallucination rules: model must ONLY use information explicitly present in the provided content. No facts, prices, or details from training data.
 
