@@ -14,7 +14,10 @@ All imports are relative (`from .constants import ...`). Package entry point: `w
 
 Single OpenRouter client in `llm.py` shared for both LLM and embedding calls. Same lazy singleton pattern as other pipelines. Timeout set to 60s.
 
-Page fetching uses Playwright (headless Chromium) to render JS-heavy pages. BeautifulSoup extracts metadata and main text content.
+Page fetching uses httpx (fast, lightweight) with Playwright (headless Chromium) as fallback for JS-heavy pages. BeautifulSoup extracts metadata and main text content.
+
+## Error handling
+Pipeline errors raise `PipelineError` (from `errors.py`) instead of calling `sys.exit(1)`. This makes the pipeline safe for concurrent use via the FastAPI server. `sys.exit(1)` is only used in the CLI `main()` entry point.
 
 ## Enrichment flow in `enrich_page()`
 ```
