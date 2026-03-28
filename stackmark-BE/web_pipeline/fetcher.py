@@ -29,18 +29,23 @@ def fetch_page(url: str) -> str:
     Returns rendered HTML. Falls back to Playwright only if the httpx
     response yields too little text content (likely a JS-rendered SPA).
     """
-    # Try lightweight httpx fetch first
+    # Try lightweight httpx fetch up to 3 times before falling back
     print("   Trying lightweight HTTP fetch...")
-    html = _fetch_with_httpx(url)
-    main_text = _extract_main_text(BeautifulSoup(html, "html.parser"))
+    for attempt in range(1, 4):
+        try:
+            html = _fetch_with_httpx(url)
+            main_text = _extract_main_text(BeautifulSoup(html, "html.parser"))
 
-    if len(main_text) >= MIN_CONTENT_LENGTH:
-        print(f"   Got {len(main_text)} chars of content — using HTTP response")
-        return html
+            if len(main_text) >= MIN_CONTENT_LENGTH:
+                print(f"   Got {len(main_text)} chars of content — using HTTP response")
+                return html
 
-    # Fallback to Playwright for JS-rendered pages
-    print(f"   Only {len(main_text)} chars of content — page likely needs JS rendering")
-    print("   Falling back to headless browser...")
+            print(f"   Attempt {attempt}/3: only {len(main_text)} chars of content")
+        except Exception as e:
+            print(f"   Attempt {attempt}/3 failed: {e}")
+
+    # Fallback to Playwright for JS-rendered or blocked pages
+    print("   All HTTP attempts returned insufficient content — falling back to headless browser...")
     return _fetch_with_playwright(url)
 
 
