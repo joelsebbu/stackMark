@@ -130,7 +130,7 @@ stackmark-BE/
 5. Store in PostgreSQL via `db.operations.insert_embedding(source="youtube", ...)`
 
 ## Pipeline flow (web_pipeline)
-1. Fetch page via httpx (fast); fallback to Playwright headless Chromium if content is too short (JS-rendered sites)
+1. Fetch page via httpx (fast, up to 3 retries); fallback to Playwright headless Chromium if all attempts return too little content (JS-rendered sites)
 2. Extract metadata (title, meta description, OG tags) and main text content via BeautifulSoup
 3. Enrich with Gemini (text-only — page content + metadata sent as text block)
 4. Generate embedding vector via OpenRouter
