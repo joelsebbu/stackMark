@@ -1,38 +1,59 @@
 # StackMark — Ingestion Pipeline Prototype
 
 Barebone prototype of the StackMark ingestion pipeline.
-Takes a tweet URL → fetches content via Twitter API v2 → analyzes with Gemini → generates a search-optimized description and embedding.
+Takes social media URLs → fetches content → analyzes with Gemini → generates search-optimized descriptions and embeddings.
+
+Supported sources: **X/Twitter**, **Instagram** (posts, reels, carousels).
 
 ## Setup
 
 ```bash
-# 1. Clone / navigate to this folder
-cd stackmark-pipeline
+# 1. Navigate to this folder
+cd stackmark-BE
 
 # 2. Set your API keys
 cp .env.example .env
 # Edit .env and add:
 #   OPENROUTER_API_KEY  — from https://openrouter.ai/keys
 #   X_API_BEARER_TOKEN  — from https://developer.x.com
+#   DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME — PostgreSQL
 
-# 3. Run it (uv handles venv + deps automatically)
+# 3. Ensure ffmpeg is installed (needed for Instagram video fallback)
+sudo apt install ffmpeg
+
+# 4. Run it (uv handles venv + deps automatically)
 uv run -m x_pipeline.pipeline "https://x.com/someone/status/123456"
+uv run -m instagram_pipeline "https://www.instagram.com/p/SHORTCODE/"
+uv run -m instagram_pipeline "https://www.instagram.com/user/reel/SHORTCODE/"
+
+# 5. Semantic search over stored bookmarks
+uv run -m retrieval.search "your query" --top 5
 ```
 
 That's it. `uv run` will:
 - Create a `.venv` virtual environment
-- Install dependencies (openai, requests, python-dotenv)
+- Install dependencies (openai, requests, instaloader, python-dotenv)
 - Run the pipeline
 
 ## What it does
 
+### X/Twitter pipeline
 ```
-Tweet URL → Classify → Fetch (Twitter API v2) → Analyze (Gemini) → Detect quote tweet → Merge quoted content → Generate embedding → Output
+Tweet URL → Classify → Fetch (Twitter API v2) → Analyze (Gemini) → Detect quote tweet → Merge quoted content → Generate embedding → Store in DB
 ```
 
 For video tweets, the pipeline triages with the tweet text + preview frame + top replies. If the model can produce a confident description from that context alone, it does. Otherwise, the tweet is flagged with `needs_video_review: true` for later processing.
 
-The output is a JSON payload optimized for vector embedding search:
+### Instagram pipeline
+```
+Instagram URL → Extract shortcode → Fetch (instaloader) → Download media → Analyze (Gemini) → Generate embedding → Store in DB
+```
+
+For video reels, the pipeline sends the full video as base64 to Gemini. If that fails (size limits, API errors), it falls back to extracting frames with ffmpeg and sending them as multiple images.
+
+### Output format
+
+Both pipelines produce the same JSON schema optimized for vector embedding search:
 
 ```json
 {
@@ -50,17 +71,36 @@ The output is a JSON payload optimized for vector embedding search:
 ## Project structure
 
 ```
-stackmark-pipeline/
+stackmark-BE/
 ├── pyproject.toml
 ├── uv.lock
 ├── README.md
-└── x_pipeline/
-    ├── __init__.py
-    ├── pipeline.py      # Main pipeline orchestration
-    ├── constants.py     # Model names, API endpoints, config
-    ├── prompts.py       # LLM prompts (enrichment + video triage)
-    ├── utils.py         # Text processing helpers
-    └── tweets.csv       # Sample tweet data
+├── x_pipeline/              # X/Twitter ingestion
+│   ├── pipeline.py          # Main orchestration
+│   ├── constants.py         # Model names, API endpoints, config
+│   ├── prompts.py           # LLM prompts (enrichment + video triage)
+│   ├── utils.py             # Text processing helpers
+│   └── tweets.csv           # Sample tweet data
+├── instagram_pipeline/      # Instagram ingestion
+│   ├── pipeline.py          # Main orchestration
+│   ├── fetcher.py           # URL parsing, instaloader fetch + download
+│   ├── media.py             # base64 encoding, file finding, ffmpeg frames
+│   ├── messages.py          # LLM message building (photo/video/frames)
+│   ├── llm.py               # OpenRouter client, LLM calls, embeddings
+│   ├── constants.py         # Model names, URL pattern, frame settings
+│   ├── prompts.py           # Enrichment prompt for Instagram
+│   └── downloads/           # Downloaded media
+├── db/                      # Database layer
+│   ├── base.py              # SQLAlchemy DeclarativeBase
+│   ├── session.py           # Engine + SessionLocal factory
+│   ├── operations.py        # insert_embedding()
+│   └── models/
+│       └── embedding.py     # Embedding model (uuid, source, url, vector, created_at)
+├── retrieval/               # Semantic search layer
+│   ├── search.py            # generate_query_embedding() + search()
+│   └── __main__.py          # CLI entry point
+└── alembic/                 # Database migrations
+    └── versions/
 ```
 
 ## Cost
