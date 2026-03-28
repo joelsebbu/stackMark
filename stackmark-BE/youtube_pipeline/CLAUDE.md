@@ -16,6 +16,9 @@ Single OpenRouter client in `llm.py` shared for both LLM and embedding calls. Sa
 
 Metadata fetching uses `yt-dlp` (no API key needed). No video downloading — YouTube URL is passed directly to Gemini for analysis.
 
+## Error handling
+Pipeline errors raise `PipelineError` (from `errors.py`) instead of calling `sys.exit(1)`. This makes the pipeline safe for concurrent use via the FastAPI server. `sys.exit(1)` is only used in the CLI `main()` entry point.
+
 ## Enrichment flow in `enrich_video()`
 ```
 fetch metadata via yt-dlp (title, description, channel, tags)
