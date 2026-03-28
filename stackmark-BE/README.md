@@ -3,7 +3,7 @@
 Barebone prototype of the StackMark ingestion pipeline.
 Takes social media URLs → fetches content → analyzes with Gemini → generates search-optimized descriptions and embeddings.
 
-Supported sources: **X/Twitter**, **Instagram** (posts, reels, carousels).
+Supported sources: **X/Twitter**, **Instagram** (posts, reels, carousels), **YouTube**, **Web** (any URL).
 
 ## Setup
 
@@ -21,18 +21,23 @@ cp .env.example .env
 # 3. Ensure ffmpeg is installed (needed for Instagram video fallback)
 sudo apt install ffmpeg
 
-# 4. Run it (uv handles venv + deps automatically)
+# 4. Install Playwright browser (needed for web pipeline JS fallback)
+uv run playwright install chromium
+
+# 5. Run it (uv handles venv + deps automatically)
 uv run -m x_pipeline.pipeline "https://x.com/someone/status/123456"
 uv run -m instagram_pipeline "https://www.instagram.com/p/SHORTCODE/"
 uv run -m instagram_pipeline "https://www.instagram.com/user/reel/SHORTCODE/"
+uv run -m youtube_pipeline "https://www.youtube.com/watch?v=VIDEO_ID"
+uv run -m web_pipeline "https://example.com/article"
 
-# 5. Semantic search over stored bookmarks
+# 6. Semantic search over stored bookmarks
 uv run -m retrieval.search "your query" --top 5
 ```
 
 That's it. `uv run` will:
 - Create a `.venv` virtual environment
-- Install dependencies (openai, requests, instaloader, python-dotenv)
+- Install dependencies (openai, requests, instaloader, yt-dlp, beautifulsoup4, playwright, python-dotenv)
 - Run the pipeline
 
 ## What it does
@@ -51,9 +56,23 @@ Instagram URL → Extract shortcode → Fetch (instaloader) → Download media �
 
 For video reels, the pipeline sends the full video as base64 to Gemini. If that fails (size limits, API errors), it falls back to extracting frames with ffmpeg and sending them as multiple images.
 
+### YouTube pipeline
+```
+YouTube URL → Extract video ID → Fetch metadata (yt-dlp) → Analyze (Gemini, direct URL) → Generate embedding → Store in DB
+```
+
+Passes the YouTube URL directly to Gemini for video analysis — no downloading needed. Falls back to metadata-only analysis if URL analysis fails.
+
+### Web pipeline
+```
+Any URL → Fetch page (httpx → Playwright fallback) → Extract metadata + text (BeautifulSoup) → Analyze (Gemini) → Generate embedding → Store in DB
+```
+
+Tries a lightweight HTTP fetch up to 3 times. If all attempts return too little content (likely a JS-rendered SPA) or fail, falls back to Playwright headless Chromium to render the page with JavaScript.
+
 ### Output format
 
-Both pipelines produce the same JSON schema optimized for vector embedding search:
+All pipelines produce the same JSON schema optimized for vector embedding search:
 
 ```json
 {
@@ -90,6 +109,20 @@ stackmark-BE/
 │   ├── constants.py         # Model names, URL pattern, frame settings
 │   ├── prompts.py           # Enrichment prompt for Instagram
 │   └── downloads/           # Downloaded media
+├── youtube_pipeline/        # YouTube ingestion
+│   ├── pipeline.py          # Main orchestration
+│   ├── fetcher.py           # URL parsing, yt-dlp metadata fetch
+│   ├── messages.py          # LLM message building
+│   ├── llm.py               # OpenRouter client, LLM calls, embeddings
+│   ├── constants.py         # Model names, URL patterns
+│   └── prompts.py           # Enrichment prompt for YouTube
+├── web_pipeline/            # Web page ingestion (any URL)
+│   ├── pipeline.py          # Main orchestration
+│   ├── fetcher.py           # httpx fetch + Playwright fallback, BeautifulSoup extraction
+│   ├── messages.py          # LLM message building
+│   ├── llm.py               # OpenRouter client, LLM calls, embeddings
+│   ├── constants.py         # Model names, content length limits
+│   └── prompts.py           # Enrichment prompt for web pages
 ├── db/                      # Database layer
 │   ├── base.py              # SQLAlchemy DeclarativeBase
 │   ├── session.py           # Engine + SessionLocal factory
