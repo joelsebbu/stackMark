@@ -1,0 +1,22 @@
+meta {
+  name: ingest
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8000/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "url": "https://x.com/taydotfun/status/2037173278767243528?s=20"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
