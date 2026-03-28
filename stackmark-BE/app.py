@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from router import ingest
 from retrieval.search import search
+from errors import PipelineError
 
 app = FastAPI(title="StackMark", version="0.1.0")
 
@@ -37,8 +38,8 @@ def ingest_url(req: IngestRequest):
         result = ingest(req.url)
         result.pop("embedding", None)
         return success(result)
-    except SystemExit:
-        return error("Pipeline failed to process the URL.")
+    except PipelineError as e:
+        return error(str(e))
     except Exception as e:
         return error(str(e))
 

@@ -19,6 +19,7 @@ from .messages import build_web_page_messages
 from .prompts import ENRICHMENT_PROMPT
 
 from db.operations import insert_embedding
+from errors import PipelineError
 
 
 def _format_metadata(metadata: dict[str, Any]) -> str:
@@ -57,8 +58,7 @@ def enrich_page(metadata: dict[str, Any]) -> dict[str, Any]:
 def run_pipeline(url: str) -> dict[str, Any]:
     """Run the full web ingestion pipeline on a URL."""
     if not os.getenv("OPENROUTER_API_KEY"):
-        print("Error: OPENROUTER_API_KEY not set in .env")
-        sys.exit(1)
+        raise PipelineError("OPENROUTER_API_KEY not set in .env")
 
     # ── Step 1: Fetch page ──
     print("=" * 60)
@@ -98,8 +98,7 @@ def run_pipeline(url: str) -> dict[str, Any]:
         embedding = generate_embedding(embedding_text)
         print(f"   Generated embedding: {len(embedding)} dimensions")
     except Exception as e:
-        print(f"\n   Error generating embedding: {e}")
-        sys.exit(1)
+        raise PipelineError(f"Error generating embedding: {e}") from e
 
     # ── Step 5: Store in database ──
     print("\n   Storing to database...")
