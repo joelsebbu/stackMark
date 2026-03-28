@@ -13,6 +13,8 @@ Backend for StackMark, a personal bookmark manager. Ingestion pipelines process 
 - instaloader for Instagram post/reel data (no API key needed)
 - yt-dlp for YouTube video metadata and download (no API key needed)
 - ffmpeg/ffprobe for video frame extraction (Instagram/YouTube video fallback)
+- Playwright (headless Chromium) for web page rendering (handles JS-heavy sites)
+- beautifulsoup4 for HTML parsing and content extraction
 
 ## Required env vars (in `.env`)
 - `OPENROUTER_API_KEY` — for LLM and embedding calls
@@ -33,6 +35,9 @@ uv run -m instagram_pipeline "https://www.instagram.com/user/reel/SHORTCODE/"
 # Ingest a YouTube video
 uv run -m youtube_pipeline "https://www.youtube.com/watch?v=VIDEO_ID"
 uv run -m youtube_pipeline "https://youtu.be/VIDEO_ID"
+
+# Ingest any web page
+uv run -m web_pipeline "https://example.com/article"
 
 # Semantic search
 uv run -m retrieval.search "your query" --top 5
@@ -76,6 +81,14 @@ stackmark-BE/
 │   ├── constants.py        # Model names, URL patterns
 │   ├── prompts.py          # ENRICHMENT_PROMPT for YouTube
 │   └── __main__.py         # CLI entry point
+├── web_pipeline/           # Web page ingestion pipeline
+│   ├── pipeline.py         # Main orchestration (enrich_page, run_pipeline)
+│   ├── fetcher.py          # Playwright page fetch, BeautifulSoup metadata extraction
+│   ├── messages.py         # LLM message building (text-only)
+│   ├── llm.py              # OpenRouter client, LLM calls, embeddings
+│   ├── constants.py        # Model names, content length limits
+│   ├── prompts.py          # ENRICHMENT_PROMPT for web pages
+│   └── __main__.py         # CLI entry point
 └── retrieval/              # Semantic search layer
     ├── search.py           # generate_query_embedding() + search()
     └── __main__.py         # CLI entry point
@@ -116,6 +129,13 @@ stackmark-BE/
 4. Generate embedding vector via OpenRouter
 5. Store in PostgreSQL via `db.operations.insert_embedding(source="youtube", ...)`
 
+## Pipeline flow (web_pipeline)
+1. Fetch page via httpx (fast); fallback to Playwright headless Chromium if content is too short (JS-rendered sites)
+2. Extract metadata (title, meta description, OG tags) and main text content via BeautifulSoup
+3. Enrich with Gemini (text-only — page content + metadata sent as text block)
+4. Generate embedding vector via OpenRouter
+5. Store in PostgreSQL via `db.operations.insert_embedding(source="web", ...)`
+
 ## Key design decisions
 - No video downloading for x_pipeline — video tweets are triaged from text + preview + replies
 - Instagram pipeline downloads media and base64-encodes it for direct LLM analysis
@@ -126,3 +146,5 @@ stackmark-BE/
 - YouTube pipeline passes URL directly to Gemini for video analysis — no download needed
 - yt-dlp used only for metadata fetching (no API key required)
 - Same embedding model + dimensions used for both ingestion and retrieval to ensure consistency
+- Web pipeline uses httpx for fast fetching, Playwright as fallback for JS-rendered pages (React, SPAs)
+- Web pipeline sends text-only to Gemini (no images) — og:image URL included as metadata
