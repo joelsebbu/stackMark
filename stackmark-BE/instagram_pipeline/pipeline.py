@@ -9,6 +9,7 @@ Usage:
 """
 
 import os
+import shutil
 import sys
 import tempfile
 from typing import Any
@@ -104,65 +105,70 @@ def run_pipeline(url: str) -> dict[str, Any]:
     download_dir = download_media(post, shortcode)
     print(f"   Downloaded to: {download_dir}")
 
-    # ── Step 4: Enrich with Gemini ──
-    description = enrich_post(post, download_dir)
-
-    if description.get("parse_error"):
-        print(f"\n{'=' * 60}")
-        print("Could not parse LLM response as JSON. Raw response:")
-        print(description.get("raw_response", "No response"))
-        print(f"{'=' * 60}")
-        return description
-
-    # ── Step 5: Generate embedding ──
-    print("\n   Generating embedding vector...")
-    embedding_text = (
-        f"{description.get('description', '')} "
-        f"{' '.join(description.get('tags', []))} "
-        f"{' '.join(description.get('entities', []))}"
-    )
     try:
-        embedding = generate_embedding(embedding_text)
-        print(f"   Generated embedding: {len(embedding)} dimensions")
-    except Exception as e:
-        raise PipelineError(f"Error generating embedding: {e}") from e
+        # ── Step 4: Enrich with Gemini ──
+        description = enrich_post(post, download_dir)
 
-    # ── Step 6: Store in database ──
-    print("\n   Storing to database...")
-    record = insert_embedding(
-        source="instagram",
-        url=url,
-        embedding=embedding,
-    )
-    print(f"   Saved with UUID: {record.uuid}")
+        if description.get("parse_error"):
+            print(f"\n{'=' * 60}")
+            print("Could not parse LLM response as JSON. Raw response:")
+            print(description.get("raw_response", "No response"))
+            print(f"{'=' * 60}")
+            return description
 
-    # ── Output ──
-    print(f"\n{'=' * 60}")
-    print("PIPELINE OUTPUT")
-    print(f"{'=' * 60}")
+        # ── Step 5: Generate embedding ──
+        print("\n   Generating embedding vector...")
+        embedding_text = (
+            f"{description.get('description', '')} "
+            f"{' '.join(description.get('tags', []))} "
+            f"{' '.join(description.get('entities', []))}"
+        )
+        try:
+            embedding = generate_embedding(embedding_text)
+            print(f"   Generated embedding: {len(embedding)} dimensions")
+        except Exception as e:
+            raise PipelineError(f"Error generating embedding: {e}") from e
 
-    print(f"\n   Description:")
-    print(f"   {description.get('description', 'N/A')}")
+        # ── Step 6: Store in database ──
+        print("\n   Storing to database...")
+        record = insert_embedding(
+            source="instagram",
+            url=url,
+            embedding=embedding,
+        )
+        print(f"   Saved with UUID: {record.uuid}")
 
-    print(f"\n   Tags:")
-    tags = description.get("tags", [])
-    print(f"   {', '.join(tags)}")
+        # ── Output ──
+        print(f"\n{'=' * 60}")
+        print("PIPELINE OUTPUT")
+        print(f"{'=' * 60}")
 
-    print(f"\n   Content Type: {description.get('content_type', 'N/A')}")
-    mood = description.get("mood", [])
-    print(f"   Mood: {', '.join(mood) if mood else 'N/A'}")
-    print(f"   Has Media: {description.get('has_media', 'N/A')} ({description.get('media_type', 'N/A')})")
-    print(f"   Media Confidence: {description.get('media_confidence', 'N/A')}")
+        print(f"\n   Description:")
+        print(f"   {description.get('description', 'N/A')}")
 
-    print(f"\n   Entities:")
-    entities = description.get("entities", [])
-    print(f"   {', '.join(entities) if entities else 'None'}")
+        print(f"\n   Tags:")
+        tags = description.get("tags", [])
+        print(f"   {', '.join(tags)}")
 
-    print(f"\n   Embedding: {len(embedding)} dimensions")
+        print(f"\n   Content Type: {description.get('content_type', 'N/A')}")
+        mood = description.get("mood", [])
+        print(f"   Mood: {', '.join(mood) if mood else 'N/A'}")
+        print(f"   Has Media: {description.get('has_media', 'N/A')} ({description.get('media_type', 'N/A')})")
+        print(f"   Media Confidence: {description.get('media_confidence', 'N/A')}")
 
-    print(f"\n{'=' * 60}")
+        print(f"\n   Entities:")
+        entities = description.get("entities", [])
+        print(f"   {', '.join(entities) if entities else 'None'}")
 
-    return {**description, "embedding": embedding}
+        print(f"\n   Embedding: {len(embedding)} dimensions")
+
+        print(f"\n{'=' * 60}")
+
+        return {**description, "embedding": embedding}
+    finally:
+        if os.path.isdir(download_dir):
+            shutil.rmtree(download_dir, ignore_errors=True)
+            print(f"   Cleaned up: {download_dir}")
 
 
 def main() -> None:
