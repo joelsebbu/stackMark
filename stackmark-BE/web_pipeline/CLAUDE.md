@@ -18,9 +18,9 @@ Page fetching uses Playwright (headless Chromium) to render JS-heavy pages. Beau
 
 ## Enrichment flow in `enrich_page()`
 ```
-fetch page via httpx (fast, lightweight)
+fetch page via httpx (fast, lightweight) — up to 3 attempts
   ├─ If enough content (≥200 chars): use HTTP response
-  └─ Fallback: re-fetch via Playwright headless Chromium (JS rendering)
+  └─ Fallback (after 3 failed attempts): re-fetch via Playwright headless Chromium (JS rendering)
 → extract metadata (title, OG tags, meta description) + main text via BeautifulSoup
 → send text-only payload to Gemini for enrichment
 ```
@@ -33,7 +33,7 @@ fetch page via httpx (fast, lightweight)
 5. Store in PostgreSQL via `db.operations.insert_embedding(source="web", ...)`
 
 ## Key design decisions
-- httpx first (fast, Lambda-friendly), Playwright fallback only when body is too short (<200 chars)
+- httpx first (fast, Lambda-friendly) with 3 retries, Playwright fallback only after all attempts return too little content (<200 chars) or fail
 - Text-only enrichment — og:image URL included as metadata text, not sent as image
 - 100k char content cap — safety net for extremely large pages, Gemini has 1M token context
 - Strips nav/footer/header/aside/script/style elements before text extraction
