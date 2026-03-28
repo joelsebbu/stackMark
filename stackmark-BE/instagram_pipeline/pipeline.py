@@ -23,6 +23,7 @@ from .messages import build_photo_messages, build_video_messages, build_frames_m
 from .prompts import ENRICHMENT_PROMPT
 
 from db.operations import insert_embedding
+from errors import PipelineError
 
 
 def enrich_post(post: instaloader.Post, download_dir: str) -> dict[str, Any]:
@@ -76,8 +77,7 @@ def enrich_post(post: instaloader.Post, download_dir: str) -> dict[str, Any]:
 def run_pipeline(url: str) -> dict[str, Any]:
     """Run the full Instagram ingestion pipeline on a URL."""
     if not os.getenv("OPENROUTER_API_KEY"):
-        print("Error: OPENROUTER_API_KEY not set in .env")
-        sys.exit(1)
+        raise PipelineError("OPENROUTER_API_KEY not set in .env")
 
     # ── Step 1: Parse URL ──
     print("=" * 60)
@@ -125,8 +125,7 @@ def run_pipeline(url: str) -> dict[str, Any]:
         embedding = generate_embedding(embedding_text)
         print(f"   Generated embedding: {len(embedding)} dimensions")
     except Exception as e:
-        print(f"\n   Error generating embedding: {e}")
-        sys.exit(1)
+        raise PipelineError(f"Error generating embedding: {e}") from e
 
     # ── Step 6: Store in database ──
     print("\n   Storing to database...")
