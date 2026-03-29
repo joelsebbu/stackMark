@@ -1,7 +1,6 @@
-# StackMark — Ingestion Pipeline Prototype
+# StackMark — Ingestion Pipeline & API
 
-Barebone prototype of the StackMark ingestion pipeline.
-Takes social media URLs → fetches content → analyzes with Gemini → generates search-optimized descriptions and embeddings.
+Personal bookmark manager that takes social media URLs → fetches content → analyzes with Gemini → generates search-optimized descriptions and embeddings → exposes via FastAPI.
 
 Supported sources: **X/Twitter**, **Instagram** (posts, reels, carousels), **YouTube**, **Web** (any URL).
 
@@ -24,23 +23,61 @@ sudo apt install ffmpeg
 # 4. Install Playwright browser (needed for web pipeline JS fallback)
 uv run playwright install chromium
 
-# 5. Run it (uv handles venv + deps automatically)
+# 5. Install dependencies
+uv sync
+```
+
+## Running the API
+
+```bash
+# Start the FastAPI server
+uv run uvicorn app:app --host 0.0.0.0 --port 8000
+
+# Health check
+curl http://localhost:8000/health
+
+# Ingest a URL (auto-detects source: x, instagram, youtube, or web)
+curl -X POST http://localhost:8000/ingest \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://x.com/someone/status/123456"}'
+
+# Semantic search
+curl -X POST http://localhost:8000/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query": "funny programming meme", "top_k": 5}'
+```
+
+All responses follow a common structure:
+```json
+{
+  "success": true,
+  "error": null,
+  "data": { ... }
+}
+```
+
+## CLI usage (still works)
+
+```bash
 uv run -m x_pipeline.pipeline "https://x.com/someone/status/123456"
 uv run -m instagram_pipeline "https://www.instagram.com/p/SHORTCODE/"
-uv run -m instagram_pipeline "https://www.instagram.com/user/reel/SHORTCODE/"
 uv run -m youtube_pipeline "https://www.youtube.com/watch?v=VIDEO_ID"
 uv run -m web_pipeline "https://example.com/article"
-
-# 6. Semantic search over stored bookmarks
 uv run -m retrieval.search "your query" --top 5
 ```
 
-That's it. `uv run` will:
-- Create a `.venv` virtual environment
-- Install dependencies (openai, requests, instaloader, yt-dlp, beautifulsoup4, playwright, python-dotenv)
-- Run the pipeline
+`uv run` will create a `.venv`, install dependencies, and run the command.
 
-## What it does
+## How it works
+
+### Unified URL router
+The `router.py` module auto-detects the URL source using regex patterns from each pipeline and dispatches to the correct `run_pipeline()`. The web pipeline is the fallback for any URL that doesn't match X, Instagram, or YouTube.
+
+### API layer
+`app.py` exposes two FastAPI endpoints (`POST /ingest`, `POST /search`) with:
+- Common response structure (`success`, `error`, `data`)
+- `PipelineError` exceptions instead of `sys.exit()` for safe concurrent request handling
+- Per-request timeouts (5 min for ingestion, 30s for search) to prevent stuck threads
 
 ### X/Twitter pipeline
 ```
@@ -51,10 +88,10 @@ For video tweets, the pipeline triages with the tweet text + preview frame + top
 
 ### Instagram pipeline
 ```
-Instagram URL → Extract shortcode → Fetch (instaloader) → Download media → Analyze (Gemini) → Generate embedding → Store in DB
+Instagram URL → Extract shortcode → Fetch (instaloader) → Download media → Analyze (Gemini) → Generate embedding → Store in DB → Clean up downloaded media
 ```
 
-For video reels, the pipeline sends the full video as base64 to Gemini. If that fails (size limits, API errors), it falls back to extracting frames with ffmpeg and sending them as multiple images.
+For video reels, the pipeline sends the full video as base64 to Gemini. If that fails (size limits, API errors), it falls back to extracting frames with ffmpeg and sending them as multiple images. Downloaded media is automatically cleaned up after processing (success or failure).
 
 ### YouTube pipeline
 ```
@@ -91,6 +128,9 @@ All pipelines produce the same JSON schema optimized for vector embedding search
 
 ```
 stackmark-BE/
+├── app.py                   # FastAPI application (POST /ingest, POST /search)
+├── router.py                # Unified URL router — auto-detects source, dispatches to pipeline
+├── errors.py                # PipelineError exception
 ├── pyproject.toml
 ├── uv.lock
 ├── README.md
@@ -107,8 +147,7 @@ stackmark-BE/
 │   ├── messages.py          # LLM message building (photo/video/frames)
 │   ├── llm.py               # OpenRouter client, LLM calls, embeddings
 │   ├── constants.py         # Model names, URL pattern, frame settings
-│   ├── prompts.py           # Enrichment prompt for Instagram
-│   └── downloads/           # Downloaded media
+│   └── prompts.py           # Enrichment prompt for Instagram
 ├── youtube_pipeline/        # YouTube ingestion
 │   ├── pipeline.py          # Main orchestration
 │   ├── fetcher.py           # URL parsing, yt-dlp metadata fetch

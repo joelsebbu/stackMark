@@ -39,6 +39,7 @@ from .utils import (
     pick_media_type,
 )
 from db.operations import insert_embedding
+from errors import PipelineError
 
 # Load environment variables from .env file
 load_dotenv()
@@ -58,8 +59,7 @@ def _get_openrouter_client() -> OpenAI:
 
     if _openrouter_client is None:
         if not openrouter_api_key:
-            print("❌ Error: OPENROUTER_API_KEY not set in environment.")
-            sys.exit(1)
+            raise PipelineError("OPENROUTER_API_KEY not set in environment.")
         _openrouter_client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=openrouter_api_key)
 
     return _openrouter_client
@@ -633,9 +633,7 @@ def run_pipeline(url: str) -> dict[str, Any]:
         "X_API_BEARER_TOKEN": x_api_bearer_token,
     }.items() if not v]
     if missing:
-        print(f"❌ Error: Missing env vars: {', '.join(missing)}")
-        print("   Add your keys to the .env file.")
-        sys.exit(1)
+        raise PipelineError(f"Missing env vars: {', '.join(missing)}")
 
     # ── Step 1: Classify ──
     print("=" * 60)
@@ -648,16 +646,14 @@ def run_pipeline(url: str) -> dict[str, Any]:
     print(f"   URL: {url_info['url']}")
 
     if url_info["source"] == "unknown":
-        print("\n❌ Only X/Twitter URLs are supported in this prototype.")
-        sys.exit(1)
+        raise PipelineError("Only X/Twitter URLs are supported in this pipeline.")
 
     # ── Step 2: Fetch tweet data from Twitter API ──
     print(f"\n📡 Fetching tweet {url_info['tweet_id']} from Twitter API...")
     try:
         tweet_data = fetch_tweet(url_info["tweet_id"])
     except requests.HTTPError as exc:
-        print(f"\n❌ Failed to fetch tweet: {exc}")
-        sys.exit(1)
+        raise PipelineError(f"Failed to fetch tweet: {exc}") from exc
 
     author = tweet_data.get("includes", {}).get("users", [{}])[0]
     print(f"   Author: @{author.get('username', 'unknown')} ({author.get('name', '')})")
@@ -730,8 +726,7 @@ def run_pipeline(url: str) -> dict[str, Any]:
             embedding = generate_embedding(embedding_text)
             print(f"   ✅ Generated embedding: {len(embedding)} dimensions")
         except Exception as e:
-            print(f"\n❌ Error generating embedding: {e}")
-            sys.exit(1)
+            raise PipelineError(f"Error generating embedding: {e}") from e
 
     # ── Step 6: Store in database ──
     if embedding and not description.get("parse_error"):

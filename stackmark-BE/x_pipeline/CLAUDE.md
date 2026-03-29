@@ -12,6 +12,9 @@ All imports are relative (`from .constants import ...`). Package entry point: `x
 
 Single OpenRouter client (`_get_openrouter_client()`) shared for both LLM and embedding calls.
 
+## Error handling
+Pipeline errors raise `PipelineError` (from `errors.py`) instead of calling `sys.exit(1)`. This makes the pipeline safe for concurrent use via the FastAPI server. `sys.exit(1)` is only used in the CLI `main()` entry point.
+
 ## Enrichment branching in `enrich_tweet()`
 ```
 extract_media(tweet_data)

@@ -9,7 +9,6 @@
 - `constants.py` — `IG_PIPELINE_MODEL`, embedding config, URL pattern, frame extraction settings
 - `prompts.py` — `ENRICHMENT_PROMPT` adapted for Instagram posts/reels
 - `__main__.py` — CLI entry point: `uv run -m instagram_pipeline "https://instagram.com/..."`
-- `downloads/` — Downloaded media stored here as `<owner>_<shortcode>/`
 
 ## Trial scripts (standalone experimentation)
 - `trial.py` — Fetch post metadata + download media via instaloader
@@ -21,11 +20,17 @@ All imports are relative (`from .constants import ...`). Package entry point: `i
 
 Single OpenRouter client in `llm.py` shared for both LLM and embedding calls. Same lazy singleton pattern as x_pipeline.
 
-Data fetching uses `instaloader` (no API key needed for public posts). Media is downloaded to `downloads/` and base64-encoded before sending to the LLM.
+Data fetching uses `instaloader` (no API key needed for public posts). Media is downloaded to a temporary directory and base64-encoded before sending to the LLM.
+
+## Error handling
+Pipeline errors raise `PipelineError` (from `errors.py`) instead of calling `sys.exit(1)`. This makes the pipeline safe for concurrent use via the FastAPI server. `sys.exit(1)` is only used in the CLI `main()` entry point.
+
+## Media cleanup
+Downloaded media is wrapped in a `try/finally` block — `shutil.rmtree()` always runs after processing, whether the pipeline succeeds, fails, or times out. This prevents disk space buildup from accumulated media files.
 
 ## Enrichment branching in `enrich_post()`
 ```
-fetch post via instaloader → download to downloads/
+fetch post via instaloader → download to temp dir
   ├─ Photo / Carousel (no video)?
   │    ├─ base64-encode each image
   │    └─ send as multiple image_url blocks + caption → ENRICHMENT_PROMPT
@@ -37,10 +42,11 @@ fetch post via instaloader → download to downloads/
 ## Pipeline flow
 1. Parse URL → extract shortcode via regex
 2. Fetch post metadata via instaloader (caption, owner, hashtags, media URLs)
-3. Download media to `instagram_pipeline/downloads/<owner>_<shortcode>/`
+3. Download media to temporary directory
 4. Enrich with Gemini (branching by post type)
 5. Generate embedding via OpenRouter (same model + dimensions as x_pipeline)
 6. Store in PostgreSQL via `db.operations.insert_embedding(source="instagram", ...)`
+7. Clean up downloaded media (always runs via `try/finally`)
 
 ## Database integration
 Reuses `db.operations.insert_embedding()` with `source: "instagram"`. Same Embedding model, same 1024-dimension vectors. Retrieval layer works automatically.
@@ -51,5 +57,5 @@ Reuses `db.operations.insert_embedding()` with `source: "instagram"`. Same Embed
 - FFmpeg frame extraction as fallback if base64 video fails (API error, size limits)
 - Carousel posts send all images in a single LLM call as multiple image_url blocks
 - No quote tweet equivalent — Instagram doesn't have that concept
-- Media downloaded to `downloads/` not `/tmp/` so files are inspectable
+- Downloaded media is automatically cleaned up after processing (success or failure)
 - Trial scripts kept as standalone for experimentation
