@@ -1,0 +1,22 @@
+meta {
+  name: ingest
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8000/ingest
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "url": "https://www.instagram.com/reel/DV87mv5CPHz/?igsh=Mnh2Mmd0NGEzbnNp"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

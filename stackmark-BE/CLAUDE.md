@@ -1,18 +1,19 @@
 # StackMark Backend
 
 ## What is this?
-Backend for StackMark, a personal bookmark manager. Ingestion pipelines process social media URLs into search-optimized descriptions with vector embeddings. A retrieval layer provides semantic search over stored bookmarks.
+Backend for StackMark, a personal bookmark manager. A FastAPI server exposes two endpoints: one for ingesting URLs (auto-routed to the correct pipeline) and one for semantic search. Ingestion pipelines process social media URLs into search-optimized descriptions with vector embeddings.
 
 ## Tech stack
 - Python 3.11+, managed with `uv`
+- **FastAPI** + **uvicorn** for the HTTP API
 - LLM: `google/gemini-2.5-flash-lite` via OpenRouter (OpenAI-compatible API)
 - Embeddings: `qwen/qwen3-embedding-8b` via OpenRouter (1024 dimensions)
 - Database: PostgreSQL with pgvector (HNSW index, cosine distance)
 - ORM: SQLAlchemy 2.0 + Alembic migrations
 - Twitter API v2 for tweet data, media, and replies
 - instaloader for Instagram post/reel data (no API key needed)
-- yt-dlp for YouTube video metadata and download (no API key needed)
-- ffmpeg/ffprobe for video frame extraction (Instagram/YouTube video fallback)
+- yt-dlp for YouTube video metadata (no API key needed)
+- ffmpeg/ffprobe for video frame extraction (Instagram video fallback)
 - Playwright (headless Chromium) for web page rendering (handles JS-heavy sites)
 - beautifulsoup4 for HTML parsing and content extraction
 
@@ -25,27 +26,35 @@ Backend for StackMark, a personal bookmark manager. Ingestion pipelines process 
 ```bash
 cd stackmark-BE
 
-# Ingest a tweet
+# Start the FastAPI server
+uv run uvicorn app:app --host 0.0.0.0 --port 8000
+
+# API endpoints
+# POST /ingest   — body: {"url": "..."}
+# POST /search   — body: {"query": "...", "top_k": 3}
+# GET  /health   — returns {"status": "ok"}
+
+# CLI still works for individual pipelines
 uv run -m x_pipeline.pipeline "https://x.com/someone/status/123456"
-
-# Ingest an Instagram post or reel
 uv run -m instagram_pipeline "https://www.instagram.com/p/SHORTCODE/"
-uv run -m instagram_pipeline "https://www.instagram.com/user/reel/SHORTCODE/"
-
-# Ingest a YouTube video
 uv run -m youtube_pipeline "https://www.youtube.com/watch?v=VIDEO_ID"
-uv run -m youtube_pipeline "https://youtu.be/VIDEO_ID"
-
-# Ingest any web page
 uv run -m web_pipeline "https://example.com/article"
-
-# Semantic search
 uv run -m retrieval.search "your query" --top 5
+```
+
+## API response format
+All endpoints return a common response structure:
+```json
+{"success": true, "error": null, "data": { ... }}
+{"success": false, "error": "error message", "data": null}
 ```
 
 ## Project structure
 ```
 stackmark-BE/
+├── app.py                  # FastAPI application (POST /ingest, POST /search, GET /health)
+├── router.py               # Unified URL router — detect_source() + ingest()
+├── errors.py               # PipelineError exception (replaces sys.exit in pipelines)
 ├── pyproject.toml          # Dependencies and project metadata
 ├── uv.lock
 ├── alembic.ini             # Alembic config (points to alembic/)
@@ -71,8 +80,7 @@ stackmark-BE/
 │   ├── llm.py              # OpenRouter client, LLM calls, embeddings
 │   ├── constants.py        # Model names, URL pattern, frame settings
 │   ├── prompts.py          # ENRICHMENT_PROMPT for Instagram
-│   ├── __main__.py         # CLI entry point
-│   └── downloads/          # Downloaded media (gitignored)
+│   └── __main__.py         # CLI entry point
 ├── youtube_pipeline/       # YouTube ingestion pipeline
 │   ├── pipeline.py         # Main orchestration (enrich_video, run_pipeline)
 │   ├── fetcher.py          # URL parsing, yt-dlp metadata fetch
@@ -83,7 +91,7 @@ stackmark-BE/
 │   └── __main__.py         # CLI entry point
 ├── web_pipeline/           # Web page ingestion pipeline
 │   ├── pipeline.py         # Main orchestration (enrich_page, run_pipeline)
-│   ├── fetcher.py          # Playwright page fetch, BeautifulSoup metadata extraction
+│   ├── fetcher.py          # httpx fetch + Playwright fallback, BeautifulSoup extraction
 │   ├── messages.py         # LLM message building (text-only)
 │   ├── llm.py              # OpenRouter client, LLM calls, embeddings
 │   ├── constants.py        # Model names, content length limits
@@ -93,6 +101,16 @@ stackmark-BE/
     ├── search.py           # generate_query_embedding() + search()
     └── __main__.py         # CLI entry point
 ```
+
+## API layer (app.py + router.py)
+- `router.py` — `detect_source(url)` matches URL against X, Instagram, YouTube patterns (from each pipeline's constants); falls back to `"web"`. `ingest(url)` dispatches to the correct `run_pipeline()`.
+- `app.py` — FastAPI app with `POST /ingest`, `POST /search`, `GET /health`. Uses `concurrent.futures` for per-request timeouts (5 min ingestion, 30s search). Catches `PipelineError` for clean error responses.
+
+## Error handling
+- `errors.py` defines `PipelineError`, used across all pipelines instead of `sys.exit(1)`
+- Pipeline failures raise `PipelineError` with descriptive messages
+- `app.py` catches these and returns `{"success": false, "error": "...", "data": null}`
+- `sys.exit(1)` is only used in CLI `main()` entry points (not reachable via API)
 
 ## Pipeline flow (x_pipeline)
 1. Classify URL (only X/Twitter supported)
@@ -113,12 +131,13 @@ stackmark-BE/
 ## Pipeline flow (instagram_pipeline)
 1. Parse URL → extract shortcode via regex
 2. Fetch post metadata via instaloader (caption, owner, hashtags, media URLs)
-3. Download media to `instagram_pipeline/downloads/`
+3. Download media to a temporary directory
 4. Enrich with Gemini:
    - **Photo/Carousel**: base64-encode images, send as multiple `image_url` blocks + caption
    - **Video/Reel**: try base64 full video → fallback to ffmpeg frame extraction
 5. Generate embedding vector via OpenRouter
 6. Store in PostgreSQL via `db.operations.insert_embedding(source="instagram", ...)`
+7. Clean up downloaded media (always runs, even on error)
 
 ## Pipeline flow (youtube_pipeline)
 1. Parse URL → extract video ID via regex (watch, youtu.be, shorts)
@@ -137,8 +156,12 @@ stackmark-BE/
 5. Store in PostgreSQL via `db.operations.insert_embedding(source="web", ...)`
 
 ## Key design decisions
+- FastAPI + uvicorn for the HTTP API; sync endpoints run in a threadpool for concurrency
+- Unified URL router (`router.py`) auto-detects source and dispatches — single entry point for all pipelines
+- `PipelineError` replaces `sys.exit(1)` to make pipelines safe for concurrent API requests
+- Per-request timeouts prevent stuck threads from exhausting the threadpool
 - No video downloading for x_pipeline — video tweets are triaged from text + preview + replies
-- Instagram pipeline downloads media and base64-encodes it for direct LLM analysis
+- Instagram pipeline downloads media temporarily, cleans up via `try/finally` + `shutil.rmtree()`
 - FFmpeg frame extraction as fallback when base64 video fails (size limits, API errors)
 - Single LLM model (`gemini-2.5-flash-lite`) for all enrichment — chosen for cost
 - Anti-hallucination rules in prompts: model must only use info explicitly present in provided content
