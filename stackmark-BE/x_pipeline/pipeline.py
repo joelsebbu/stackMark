@@ -735,6 +735,8 @@ def run_pipeline(url: str) -> dict[str, Any]:
             source=url_info["source"],
             url=url,
             embedding=embedding,
+            heading=description.get("heading"),
+            brief=description.get("brief"),
         )
         print(f"   ✅ Saved with UUID: {record.uuid}")
 
@@ -749,6 +751,12 @@ def run_pipeline(url: str) -> dict[str, Any]:
     else:
         print(f"\n📝 Description:")
         print(f"   {description.get('description', 'N/A')}")
+
+        print(f"\n📌 Heading:")
+        print(f"   {description.get('heading', 'N/A')}")
+
+        print(f"\n📋 Brief:")
+        print(f"   {description.get('brief', 'N/A')}")
 
         print(f"\n🏷️  Tags:")
         tags = description.get("tags", [])
