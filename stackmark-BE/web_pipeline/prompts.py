@@ -15,6 +15,10 @@ Return ONLY a valid JSON object (no markdown fences, no extra text) with \
 these fields:
 
 {
+  "heading": "A single short line (under 10 words) that serves as a title for this bookmark. Should be catchy and immediately tell the user what this content is about. Not a sentence — a headline.",
+
+  "brief": "Two short lines (2-3 sentences total) that give a quick summary of the content. Should tell the user enough to decide if they want to revisit this bookmark. Write for a human reader, not a search engine.",
+
   "description": "A dense, keyword-rich block of text that captures \
 everything someone might search to find this content later. Front-load \
 named entities and concrete nouns. Include synonyms and related terms \
@@ -56,28 +60,33 @@ meta description, site name, and extracted text content provided above. \
 Do NOT add facts, prices, statistics, or details from your own knowledge. \
 If the content doesn't mention a detail, do NOT invent one.
 
-2. SPECIFICITY: Use exact names. "Vercel" not "a hosting platform". \
+2. HEADING & BRIEF: The heading is a short title (under 10 words, not a \
+sentence). The brief is 2-3 sentences giving a human-readable summary. \
+These are for DISPLAY, not search — write them for a person scanning \
+their bookmarks.
+
+3. SPECIFICITY: Use exact names. "Vercel" not "a hosting platform". \
 "React" not "a JavaScript framework". "Martin Fowler" not "a software \
 engineer".
 
-3. DESCRIPTION DENSITY: Write for a search engine, not a person. Pack \
+4. DESCRIPTION DENSITY: Write for a search engine, not a person. Pack \
 in every relevant term, synonym, and related concept — but ONLY terms \
 grounded in the provided content. A good test: if someone searches any \
 reasonable phrase to find this content, at least one phrase in the \
 description should be a near-match.
 
-4. MEDIA CONFIDENCE:
+5. MEDIA CONFIDENCE:
    - Always "low" for web pages since we are not sending the actual \
 images to analyze, only the og:image URL as metadata.
 
-5. has_media: true if og:image URL was provided in the metadata, \
+6. has_media: true if og:image URL was provided in the metadata, \
 false otherwise.
 
-6. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
+7. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
 
-7. entities: 5-15 items MAX, NO duplicates, only entities central to \
+8. entities: 5-15 items MAX, NO duplicates, only entities central to \
 the page's main topic. If an entity is mentioned in passing or as a \
 minor reference, leave it out. Quality over quantity.
 
-8. Return ONLY the JSON object.
+9. Return ONLY the JSON object.
 """
