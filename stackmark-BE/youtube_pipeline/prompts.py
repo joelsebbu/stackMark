@@ -15,6 +15,10 @@ Return ONLY a valid JSON object (no markdown fences, no extra text) with \
 these fields:
 
 {
+  "heading": "A single short line (under 10 words) that serves as a title for this bookmark. Should be catchy and immediately tell the user what this content is about. Not a sentence — a headline.",
+
+  "brief": "Two short lines (2-3 sentences total) that give a quick summary of the content. Should tell the user enough to decide if they want to revisit this bookmark. Write for a human reader, not a search engine.",
+
   "description": "A dense, keyword-rich block of text that captures \
 everything someone might search to find this content later. Front-load \
 named entities and concrete nouns. Include synonyms and related terms \
@@ -58,32 +62,37 @@ description, channel name, and any media provided above. Do NOT add \
 facts, prices, statistics, or details from your own knowledge. If the \
 description doesn't mention a detail, do NOT invent one.
 
-2. MEDIA ANALYSIS: Carefully examine any video frames provided above. \
+2. HEADING & BRIEF: The heading is a short title (under 10 words, not a \
+sentence). The brief is 2-3 sentences giving a human-readable summary. \
+These are for DISPLAY, not search — write them for a person scanning \
+their bookmarks.
+
+3. MEDIA ANALYSIS: Carefully examine any video frames provided above. \
 If there's text overlay, code snippets, or captions visible in the \
 frames, transcribe them into the description.
 
-3. SPECIFICITY: Use exact names. "Fireship" not "a tech channel". \
+4. SPECIFICITY: Use exact names. "Fireship" not "a tech channel". \
 "React" not "a JavaScript framework". "Linus Tech Tips" not "a tech \
 reviewer".
 
-4. DESCRIPTION DENSITY: Write for a search engine, not a person. Pack \
+5. DESCRIPTION DENSITY: Write for a search engine, not a person. Pack \
 in every relevant term, synonym, and related concept — but ONLY terms \
 grounded in the provided content. A good test: if someone searches any \
 reasonable phrase to find this content, at least one phrase in the \
 description should be a near-match.
 
-5. MEDIA CONFIDENCE:
+6. MEDIA CONFIDENCE:
    - "high" = you can see and describe the actual visual content
    - "low" = video frames were not provided or you cannot make out the content
    - Metadata-only analysis (no frames) = always "low"
 
-6. has_media must be true for YouTube videos.
+7. has_media must be true for YouTube videos.
 
-7. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
+8. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
 
-8. entities: 5-15 items MAX, NO duplicates, only entities central to \
+9. entities: 5-15 items MAX, NO duplicates, only entities central to \
 the video's main topic. If an entity is mentioned in passing or as a \
 minor reference, leave it out. Quality over quantity.
 
-9. Return ONLY the JSON object.
+10. Return ONLY the JSON object.
 """
