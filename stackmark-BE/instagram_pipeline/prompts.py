@@ -15,6 +15,10 @@ Return ONLY a valid JSON object (no markdown fences, no extra text) with \
 these fields:
 
 {
+  "heading": "A single short line (under 10 words) that serves as a title for this bookmark. Should be catchy and immediately tell the user what this content is about. Not a sentence — a headline.",
+
+  "brief": "Two short lines (2-3 sentences total) that give a quick summary of the content. Should tell the user enough to decide if they want to revisit this bookmark. Write for a human reader, not a search engine.",
+
   "description": "A dense, keyword-rich block of text that captures \
 everything someone might search to find this content later. Front-load \
 named entities and concrete nouns. Include synonyms and related terms \
@@ -55,28 +59,33 @@ and any media provided above. Do NOT add facts, prices, statistics, \
 or details from your own knowledge. If the caption doesn't mention a \
 price, do NOT invent one.
 
-2. MEDIA ANALYSIS: Carefully examine any images or video frames provided \
+2. HEADING & BRIEF: The heading is a short title (under 10 words, not a \
+sentence). The brief is 2-3 sentences giving a human-readable summary. \
+These are for DISPLAY, not search — write them for a person scanning \
+their bookmarks.
+
+3. MEDIA ANALYSIS: Carefully examine any images or video frames provided \
 above. If there's text overlay or captions baked into the media, \
 transcribe them into the description.
 
-3. SPECIFICITY: Use exact names. "Po from Kung Fu Panda" not "animated \
+4. SPECIFICITY: Use exact names. "Po from Kung Fu Panda" not "animated \
 character". "FastAPI" not "a web framework". "Charles Leclerc" not \
 "an F1 driver".
 
-4. DESCRIPTION DENSITY: Write for a search engine, not a person. Pack \
+5. DESCRIPTION DENSITY: Write for a search engine, not a person. Pack \
 in every relevant term, synonym, and related concept — but ONLY terms \
 grounded in the provided content. A good test: if someone searches any \
 reasonable phrase to find this content, at least one phrase in the \
 description should be a near-match.
 
-5. MEDIA CONFIDENCE:
+6. MEDIA CONFIDENCE:
    - "high" = you can see and describe the actual visual content
    - "low" = images were not provided or you cannot make out the content
    - Text-only posts with no media = always "high"
 
-6. has_media must be true if images or video frames were provided above.
+7. has_media must be true if images or video frames were provided above.
 
-7. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
+8. tags: lowercase, 5-10 items, no duplicates, max 3 words each.
 
-8. Return ONLY the JSON object.
+9. Return ONLY the JSON object.
 """
