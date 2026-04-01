@@ -1,0 +1,209 @@
+---
+import { ViewTransitions } from "astro:transitions";
+
+interface Props {
+  title: string;
+  activeTab: "ingest" | "search";
+}
+
+const { title, activeTab } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a1929" />
+    <meta name="description" content="StackMark — your personal bookmark manager" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+    <title>{title}</title>
+    <ViewTransitions />
+    <script is:inline>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js");
+      }
+    </script>
+  </head>
+  <body>
+    <nav>
+      <div class="nav-left">
+        <a href="/" class="logo">StackMark</a>
+      </div>
+      <div class="nav-center">
+        <a href="/" class:list={["tab", { active: activeTab === "ingest" }]}>
+          Ingest
+        </a>
+        <a
+          href="/search"
+          class:list={["tab", { active: activeTab === "search" }]}
+        >
+          Search
+        </a>
+      </div>
+      <div class="nav-right">
+        <div class="avatar">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path
+              d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zm0 1.5c-3 0-9 1.5-9 4.5v1.5h18V18c0-3-6-4.5-9-4.5z"
+            ></path>
+          </svg>
+        </div>
+      </div>
+    </nav>
+    <main transition:animate="fade">
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style>
+  :root {
+    --navy: #0a1929;
+    --navy-light: #122031;
+    --navy-lighter: #1d2b3c;
+    --blue: #1c3f94;
+    --blue-light: #b4c5ff;
+    --orange: #ff671f;
+    --orange-light: #ffb599;
+    --text-primary: #d5e4fa;
+    --text-secondary: #a0b4d0;
+    --surface: #051424;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    background: var(--surface);
+    color: var(--text-primary);
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2rem;
+    height: 64px;
+    background: var(--navy);
+    flex-shrink: 0;
+  }
+
+  .nav-left,
+  .nav-right {
+    width: 160px;
+  }
+
+  .nav-right {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .nav-center {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-decoration: none;
+    letter-spacing: -0.02em;
+  }
+
+  .tab {
+    padding: 0.5rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.2s ease;
+  }
+
+  .tab:hover {
+    color: var(--text-primary);
+    background: var(--navy-light);
+  }
+
+  .tab.active {
+    color: white;
+    background: var(--orange);
+  }
+
+  .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--navy-lighter);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+  }
+
+  .avatar svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 640px) {
+    nav {
+      padding: 0 1rem;
+      height: 56px;
+    }
+
+    .nav-left {
+      width: auto;
+    }
+
+    .nav-right {
+      width: auto;
+    }
+
+    .logo {
+      font-size: 1.1rem;
+    }
+
+    .tab {
+      padding: 0.4rem 0.9rem;
+      font-size: 0.8rem;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+    }
+
+    .avatar svg {
+      width: 18px;
+      height: 18px;
+    }
+  }
+</style>

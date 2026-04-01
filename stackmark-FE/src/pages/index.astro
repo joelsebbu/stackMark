@@ -1,0 +1,199 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="StackMark — Ingest" activeTab="ingest">
+  <div class="ingest-container">
+    <h2 class="heading">Drop a link</h2>
+    <div class="input-row">
+      <input
+        type="url"
+        id="url-input"
+        placeholder="Paste any URL here..."
+        autocomplete="off"
+      />
+      <button id="save-btn">Save Bookmark</button>
+    </div>
+    <p id="status-msg" class="status"></p>
+  </div>
+</Layout>
+
+<style>
+  .ingest-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 2rem;
+  }
+
+  .heading {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #d5e4fa;
+    letter-spacing: -0.02em;
+  }
+
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 600px;
+    padding: 0 1.5rem;
+  }
+
+  input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    border: 1px solid #1d2b3c;
+    background: #0a1929;
+    color: #d5e4fa;
+    font-size: 0.9rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  input::placeholder {
+    color: #5a7a9e;
+  }
+
+  input:focus {
+    border-color: #1c3f94;
+  }
+
+  button {
+    padding: 0.75rem 1.25rem;
+    border-radius: 10px;
+    border: none;
+    background: #ff671f;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s ease;
+  }
+
+  button:hover {
+    background: #e55a18;
+  }
+
+  button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .status {
+    font-size: 0.85rem;
+    min-height: 1.25rem;
+  }
+
+  .status.success {
+    color: #4ade80;
+  }
+
+  .status.error {
+    color: #f97386;
+  }
+
+  @media (max-width: 640px) {
+    .ingest-container {
+      padding: 1.5rem 1rem;
+    }
+
+    .heading {
+      font-size: 1.25rem;
+    }
+
+    .input-row {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    input {
+      width: 100%;
+      font-size: 1rem;
+      padding: 0.85rem 1rem;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.85rem;
+      font-size: 0.9rem;
+    }
+  }
+</style>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const input = document.getElementById("url-input") as HTMLInputElement;
+    const btn = document.getElementById("save-btn") as HTMLButtonElement;
+    const status = document.getElementById("status-msg") as HTMLParagraphElement;
+    if (!input || !btn || !status) return;
+
+    const API_BASE = "http://localhost:8000";
+
+    // Handle shared URLs from mobile share sheet
+    const params = new URLSearchParams(window.location.search);
+    const sharedUrl = params.get("url") || params.get("text") || "";
+    if (sharedUrl) {
+      // Extract URL from shared text (apps sometimes send "title\nurl" or just the url)
+      const urlMatch = sharedUrl.match(/https?:\/\/[^\s]+/);
+      if (urlMatch) {
+        input.value = urlMatch[0];
+      } else {
+        input.value = sharedUrl;
+      }
+      // Clean up the URL bar
+      window.history.replaceState({}, "", "/");
+    }
+
+    btn.addEventListener("click", async () => {
+      const url = input.value.trim();
+      if (!url) {
+        status.textContent = "Please enter a URL";
+        status.className = "status error";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+      status.textContent = "";
+      status.className = "status";
+
+      try {
+        const res = await fetch(`${API_BASE}/ingest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          status.textContent = "Bookmark saved!";
+          status.className = "status success";
+          input.value = "";
+        } else {
+          status.textContent = data.error || "Something went wrong";
+          status.className = "status error";
+        }
+      } catch {
+        status.textContent = "Could not reach the server";
+        status.className = "status error";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Save Bookmark";
+      }
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") btn.click();
+    });
+  });
+</script>

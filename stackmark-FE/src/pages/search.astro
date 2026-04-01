@@ -1,0 +1,351 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="StackMark — Search" activeTab="search">
+  <div class="search-container">
+    <div id="results-area" class="results-area">
+      <div class="empty-state">
+        <p>Search your saved bookmarks</p>
+        <span>Type a query below to find what you're looking for</span>
+      </div>
+    </div>
+    <div class="search-bar">
+      <input
+        type="text"
+        id="search-input"
+        placeholder="Search your bookmarks..."
+        autocomplete="off"
+      />
+      <button id="search-btn" aria-label="Search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
+</Layout>
+
+<style>
+  .search-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .results-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: #5a7a9e;
+  }
+
+  .empty-state p {
+    font-size: 1.125rem;
+    font-weight: 500;
+    color: #a0b4d0;
+  }
+
+  .empty-state span {
+    font-size: 0.85rem;
+  }
+
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 2rem;
+    background: #0a1929;
+    border-top: 1px solid #1d2b3c;
+    flex-shrink: 0;
+  }
+
+  .search-bar input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    border: 1px solid #1d2b3c;
+    background: #051424;
+    color: #d5e4fa;
+    font-size: 0.9rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .search-bar input::placeholder {
+    color: #5a7a9e;
+  }
+
+  .search-bar input:focus {
+    border-color: #1c3f94;
+  }
+
+  .search-bar button {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: none;
+    background: #ff671f;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+  }
+
+  .search-bar button:hover {
+    background: #e55a18;
+  }
+
+  .search-bar button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .search-bar button svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  @media (max-width: 640px) {
+    .results-area {
+      padding: 1rem;
+    }
+
+    .search-bar {
+      padding: 0.75rem 1rem;
+    }
+
+    .search-bar input {
+      font-size: 1rem;
+      padding: 0.85rem 1rem;
+    }
+
+    .empty-state p {
+      font-size: 1rem;
+    }
+
+    .empty-state span {
+      font-size: 0.8rem;
+    }
+  }
+</style>
+
+<style is:global>
+  .result-card {
+    background: #122031;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: background 0.2s ease;
+  }
+
+  .result-card:hover {
+    background: #1d2b3c;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #d5e4fa;
+  }
+
+  .card-score {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ff671f;
+    white-space: nowrap;
+  }
+
+  .card-description {
+    font-size: 0.85rem;
+    color: #a0b4d0;
+    line-height: 1.4;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .card-source {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #b4c5ff;
+    background: #1c3f94;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    text-transform: capitalize;
+  }
+
+  .card-tag {
+    font-size: 0.7rem;
+    color: #a0b4d0;
+    background: #1d2b3c;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+  }
+
+  .card-url {
+    font-size: 0.75rem;
+    color: #5a7a9e;
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  .card-url:hover {
+    color: #b4c5ff;
+  }
+
+  .loading {
+    text-align: center;
+    color: #5a7a9e;
+    padding: 2rem;
+  }
+
+  @media (max-width: 640px) {
+    .result-card {
+      padding: 0.85rem 1rem;
+    }
+
+    .card-title {
+      font-size: 0.9rem;
+    }
+
+    .card-description {
+      font-size: 0.8rem;
+    }
+
+    .card-url {
+      font-size: 0.7rem;
+    }
+  }
+</style>
+
+<script>
+  document.addEventListener("astro:page-load", () => {
+    const input = document.getElementById("search-input") as HTMLInputElement;
+    const btn = document.getElementById("search-btn") as HTMLButtonElement;
+    const resultsArea = document.getElementById("results-area") as HTMLDivElement;
+    if (!input || !btn || !resultsArea) return;
+
+    const API_BASE = "http://localhost:8000";
+
+    function escapeHtml(str: string): string {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderResults(results: any[]) {
+      if (results.length === 0) {
+        resultsArea.innerHTML = `
+          <div class="empty-state">
+            <p>No results found</p>
+            <span>Try a different query</span>
+          </div>`;
+        return;
+      }
+
+      resultsArea.innerHTML = results
+        .map((r: any) => {
+          const meta = r.metadata || {};
+          const tags = (meta.tags || []).slice(0, 4);
+          const score =
+            r.similarity != null
+              ? `${Math.round(r.similarity * 100)}%`
+              : "";
+          const desc = meta.description || "";
+          const source = r.source || "web";
+          const url = r.url || "";
+
+          return `
+          <div class="result-card">
+            <div class="card-header">
+              <span class="card-title">${escapeHtml(desc.slice(0, 80))}${desc.length > 80 ? "..." : ""}</span>
+              ${score ? `<span class="card-score">${score} match</span>` : ""}
+            </div>
+            ${desc.length > 80 ? `<p class="card-description">${escapeHtml(desc.slice(0, 200))}${desc.length > 200 ? "..." : ""}</p>` : ""}
+            <div class="card-meta">
+              <span class="card-source">${escapeHtml(source)}</span>
+              ${tags.map((t: string) => `<span class="card-tag">${escapeHtml(t)}</span>`).join("")}
+            </div>
+            ${url ? `<a class="card-url" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>` : ""}
+          </div>`;
+        })
+        .join("");
+    }
+
+    async function doSearch() {
+      const query = input.value.trim();
+      if (!query) return;
+
+      btn.disabled = true;
+      resultsArea.innerHTML = `<div class="loading">Searching...</div>`;
+
+      try {
+        const res = await fetch(`${API_BASE}/search`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, top_k: 10 }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          renderResults(data.data || []);
+        } else {
+          resultsArea.innerHTML = `
+            <div class="empty-state">
+              <p>Error</p>
+              <span>${escapeHtml(data.error || "Something went wrong")}</span>
+            </div>`;
+        }
+      } catch {
+        resultsArea.innerHTML = `
+          <div class="empty-state">
+            <p>Could not reach the server</p>
+            <span>Make sure the backend is running on ${API_BASE}</span>
+          </div>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    btn.addEventListener("click", doSearch);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doSearch();
+    });
+  });
+</script>
