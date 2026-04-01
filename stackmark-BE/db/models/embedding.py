@@ -26,6 +26,8 @@ class Embedding(Base):
     )
     source: Mapped[str] = mapped_column(Text, nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
+    heading: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brief: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
