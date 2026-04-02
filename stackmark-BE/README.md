@@ -15,6 +15,7 @@ cp .env.example .env
 # Edit .env and add:
 #   OPENROUTER_API_KEY  — from https://openrouter.ai/keys
 #   X_API_BEARER_TOKEN  — from https://developer.x.com
+#   JWT_SECRET          — any random string for signing auth tokens
 #   DATABASE_URL or DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME — PostgreSQL
 
 # 3. Ensure ffmpeg is installed (needed for Instagram video fallback)
@@ -25,6 +26,12 @@ uv run playwright install chromium
 
 # 5. Install dependencies
 uv sync
+
+# 6. Run database migrations
+uv run alembic upgrade head
+
+# 7. Create a user
+uv run create_user --u joel_sebbu --p nice@123
 ```
 
 ## Running the API
@@ -36,15 +43,28 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 # Health check
 curl http://localhost:8000/health
 
-# Ingest a URL (auto-detects source: x, instagram, youtube, or web)
+# Login to get tokens
+curl -X POST http://localhost:8000/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username": "joel_sebbu", "password": "nice@123"}'
+# Returns: {"success": true, "data": {"access_token": "...", "refresh_token": "...", "token_type": "bearer"}}
+
+# Ingest a URL (requires auth token)
 curl -X POST http://localhost:8000/ingest \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <access_token>' \
   -d '{"url": "https://x.com/someone/status/123456"}'
 
-# Semantic search
+# Semantic search (requires auth token)
 curl -X POST http://localhost:8000/search \
   -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <access_token>' \
   -d '{"query": "funny programming meme", "top_k": 5}'
+
+# Refresh an expired access token
+curl -X POST http://localhost:8000/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"refresh_token": "<refresh_token>"}'
 ```
 
 All responses follow a common structure:
@@ -73,8 +93,16 @@ uv run -m retrieval.search "your query" --top 5
 ### Unified URL router
 The `router.py` module auto-detects the URL source using regex patterns from each pipeline and dispatches to the correct `run_pipeline()`. The web pipeline is the fallback for any URL that doesn't match X, Instagram, or YouTube.
 
+### Authentication
+All data endpoints require a JWT access token via `Authorization: Bearer <token>` header.
+- `POST /login` — validates username/password, returns access token (30 min) + refresh token (infinite lifetime)
+- `POST /refresh` — accepts a refresh token, returns a new access token
+- Passwords hashed with bcrypt, JWTs signed with HS256
+- Users created via CLI: `uv run create_user --u <username> --p <password>`
+
 ### API layer
-`app.py` exposes two FastAPI endpoints (`POST /ingest`, `POST /search`) with:
+`app.py` exposes FastAPI endpoints (`POST /login`, `POST /refresh`, `POST /ingest`, `POST /search`, `GET /health`) with:
+- JWT authentication on `/ingest` and `/search` (public: `/health`, `/login`, `/refresh`)
 - Common response structure (`success`, `error`, `data`)
 - `PipelineError` exceptions instead of `sys.exit()` for safe concurrent request handling
 - Per-request timeouts (5 min for ingestion, 30s for search) to prevent stuck threads
@@ -128,12 +156,16 @@ All pipelines produce the same JSON schema optimized for vector embedding search
 
 ```
 stackmark-BE/
-├── app.py                   # FastAPI application (POST /ingest, POST /search)
+├── app.py                   # FastAPI application (POST /login, /refresh, /ingest, /search)
 ├── router.py                # Unified URL router — auto-detects source, dispatches to pipeline
 ├── errors.py                # PipelineError exception
 ├── pyproject.toml
 ├── uv.lock
 ├── README.md
+├── auth/                    # Authentication layer
+│   ├── security.py          # JWT + bcrypt helpers
+│   ├── dependencies.py      # get_current_user FastAPI dependency
+│   └── create_user.py       # CLI: uv run create_user --u <user> --p <pass>
 ├── x_pipeline/              # X/Twitter ingestion
 │   ├── pipeline.py          # Main orchestration
 │   ├── constants.py         # Model names, API endpoints, config
@@ -167,7 +199,9 @@ stackmark-BE/
 │   ├── session.py           # Engine + SessionLocal factory
 │   ├── operations.py        # insert_embedding()
 │   └── models/
-│       └── embedding.py     # Embedding model (uuid, source, url, vector, created_at)
+│       ├── embedding.py     # Embedding model (uuid, source, url, vector, created_at)
+│       ├── user.py          # User model (uuid, username, password hash, created_at)
+│       └── refresh_token.py # RefreshToken model (uuid, user_id FK, token, created_at)
 ├── retrieval/               # Semantic search layer
 │   ├── search.py            # generate_query_embedding() + search()
 │   └── __main__.py          # CLI entry point

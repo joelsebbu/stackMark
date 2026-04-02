@@ -5,9 +5,13 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/ingest
+  url: {{base_url}}/ingest
   body: json
   auth: inherit
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
 }
 
 body:json {

@@ -1,0 +1,42 @@
+meta {
+  name: authenticate
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/login
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "username": "joel_sebbu",
+    "password": "test@123"
+  }
+}
+
+script:post-response {
+  // Get the parsed JSON response body
+  const body = res.getBody();
+  
+  // Check if the request was successful and the data object exists
+  if (body && body.success && body.data) {
+    
+    // Store the tokens as environment variables
+    bru.setEnvVar("access_token", body.data.access_token);
+    bru.setEnvVar("refresh_token", body.data.refresh_token);
+    
+    // Optional: log to the Bruno console so you can verify it worked
+    console.log("Tokens captured and saved!");
+    
+  } else {
+    console.error("Couldn't find tokens. Response was:", body);
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
