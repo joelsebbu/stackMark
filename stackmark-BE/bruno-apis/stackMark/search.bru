@@ -5,14 +5,18 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/search
+  url: {{base_url}}/search
   body: json
-  auth: inherit
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
 }
 
 body:json {
   {
-   "query": "different modes of UI like dark light and something",
+   "query": "project aboout searching stuff in video ??",
     "top_k": 3
   }
 }

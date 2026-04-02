@@ -1,0 +1,39 @@
+meta {
+  name: refresh token
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/refresh
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "refresh_token": "{{refresh_token}}"
+  }
+}
+
+script:post-response {
+  // Get the parsed JSON response body
+  const body = res.getBody();
+  
+  // Check if the request was successful and the data object exists
+  if (body && body.success && body.data) {
+    
+    // Store the access token
+    bru.setEnvVar("access_token", body.data.access_token);
+    
+    console.log("Access token captured!");
+    
+  } else {
+    console.error("Couldn't find the token. Response was:", body);
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

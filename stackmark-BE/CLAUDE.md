@@ -6,6 +6,7 @@ Backend for StackMark, a personal bookmark manager. A FastAPI server exposes two
 ## Tech stack
 - Python 3.11+, managed with `uv`
 - **FastAPI** + **uvicorn** for the HTTP API
+- **JWT authentication** via `python-jose` + `bcrypt` (access + refresh tokens)
 - LLM: `google/gemini-2.5-flash-lite` via OpenRouter (OpenAI-compatible API)
 - Embeddings: `qwen/qwen3-embedding-8b` via OpenRouter (1024 dimensions)
 - Database: PostgreSQL with pgvector (HNSW index, cosine distance)
@@ -20,19 +21,25 @@ Backend for StackMark, a personal bookmark manager. A FastAPI server exposes two
 ## Required env vars (in `.env`)
 - `OPENROUTER_API_KEY` — for LLM and embedding calls
 - `X_API_BEARER_TOKEN` — for Twitter API v2
+- `JWT_SECRET` — secret key for signing JWT tokens
 - `DATABASE_URL` or `DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_PORT`/`DB_NAME` — PostgreSQL connection
 
 ## How to run
 ```bash
 cd stackmark-BE
 
+# Create a user (first time only)
+uv run create_user --u joel_sebbu --p nice@123
+
 # Start the FastAPI server
 uv run uvicorn app:app --host 0.0.0.0 --port 8000
 
 # API endpoints
-# POST /ingest   — body: {"url": "..."}
-# POST /search   — body: {"query": "...", "top_k": 3}
-# GET  /health   — returns {"status": "ok"}
+# POST /login    — body: {"username": "...", "password": "..."}  (public)
+# POST /refresh  — body: {"refresh_token": "..."}               (public)
+# POST /ingest   — body: {"url": "..."}                         (requires Bearer token)
+# POST /search   — body: {"query": "...", "top_k": 3}           (requires Bearer token)
+# GET  /health   — returns {"status": "ok"}                     (public)
 
 # CLI still works for individual pipelines
 uv run -m x_pipeline.pipeline "https://x.com/someone/status/123456"
@@ -52,7 +59,7 @@ All endpoints return a common response structure:
 ## Project structure
 ```
 stackmark-BE/
-├── app.py                  # FastAPI application (POST /ingest, POST /search, GET /health)
+├── app.py                  # FastAPI application (POST /login, /refresh, /ingest, /search, GET /health)
 ├── router.py               # Unified URL router — detect_source() + ingest()
 ├── errors.py               # PipelineError exception (replaces sys.exit in pipelines)
 ├── pyproject.toml          # Dependencies and project metadata
@@ -60,12 +67,18 @@ stackmark-BE/
 ├── alembic.ini             # Alembic config (points to alembic/)
 ├── alembic/                # Database migrations
 │   └── versions/           # Migration scripts
+├── auth/                   # Authentication layer
+│   ├── security.py         # JWT creation/verification + bcrypt password helpers
+│   ├── dependencies.py     # FastAPI get_current_user dependency (OAuth2 Bearer)
+│   └── create_user.py      # CLI: uv run create_user --u <user> --p <pass>
 ├── db/                     # Database layer
 │   ├── base.py             # SQLAlchemy DeclarativeBase
 │   ├── session.py          # Engine + SessionLocal factory
 │   ├── operations.py       # insert_embedding()
 │   └── models/
-│       └── embedding.py    # Embedding model (uuid, source, url, vector, created_at)
+│       ├── embedding.py    # Embedding model (uuid, source, url, vector, created_at)
+│       ├── user.py         # User model (uuid, username, password hash, created_at)
+│       └── refresh_token.py # RefreshToken model (uuid, user_id FK, token, created_at)
 ├── x_pipeline/             # X/Twitter ingestion pipeline
 │   ├── pipeline.py         # Main orchestration + Twitter API calls
 │   ├── constants.py        # Model names, API endpoints, config values
@@ -102,9 +115,19 @@ stackmark-BE/
     └── __main__.py         # CLI entry point
 ```
 
+## Authentication
+- JWT-based auth with access tokens (30 min expiry) and refresh tokens (infinite lifetime)
+- `POST /login` — validates credentials, returns both tokens. `POST /refresh` — accepts refresh token, returns new access token
+- `/ingest` and `/search` require a valid access token via `Authorization: Bearer <token>` header
+- `/health`, `/login`, `/refresh` are public endpoints
+- Refresh tokens are stored in `refresh_tokens` table (can be revoked by deleting rows)
+- Passwords are hashed with bcrypt; JWTs signed with `JWT_SECRET` env var (HS256)
+- `auth/dependencies.py` provides `get_current_user` FastAPI dependency using `OAuth2PasswordBearer`
+- CLI: `uv run create_user --u <username> --p <password>` to create users
+
 ## API layer (app.py + router.py)
 - `router.py` — `detect_source(url)` matches URL against X, Instagram, YouTube patterns (from each pipeline's constants); falls back to `"web"`. `ingest(url)` dispatches to the correct `run_pipeline()`.
-- `app.py` — FastAPI app with `POST /ingest`, `POST /search`, `GET /health`. Uses `concurrent.futures` for per-request timeouts (5 min ingestion, 30s search). Catches `PipelineError` for clean error responses.
+- `app.py` — FastAPI app with `POST /login`, `POST /refresh`, `POST /ingest`, `POST /search`, `GET /health`. Uses `concurrent.futures` for per-request timeouts (5 min ingestion, 30s search). Catches `PipelineError` for clean error responses. `/ingest` and `/search` are protected with `Depends(get_current_user)`.
 
 ## Error handling
 - `errors.py` defines `PipelineError`, used across all pipelines instead of `sys.exit(1)`

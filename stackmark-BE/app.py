@@ -2,12 +2,23 @@
 
 import concurrent.futures
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel
+from sqlalchemy import select
 
-from router import ingest
-from retrieval.search import search
+from auth.dependencies import get_current_user
+from auth.security import (
+    create_access_token,
+    create_refresh_token,
+    verify_password,
+    verify_token,
+)
+from db.models.refresh_token import RefreshToken
+from db.models.user import User
+from db.session import SessionLocal
 from errors import PipelineError
+from retrieval.search import search
+from router import ingest
 
 app = FastAPI(title="StackMark", version="0.1.0")
 
@@ -31,6 +42,15 @@ class SearchRequest(BaseModel):
     top_k: int = 3
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 def success(data):
     return {"success": True, "error": None, "data": data}
 
@@ -44,8 +64,57 @@ def _run_with_timeout(fn, timeout, *args):
     return future.result(timeout=timeout)
 
 
+@app.post("/login")
+def login(req: LoginRequest):
+    with SessionLocal() as session:
+        user = session.execute(
+            select(User).where(User.username == req.username)
+        ).scalar_one_or_none()
+
+    if user is None or not verify_password(req.password, user.password):
+        return error("Invalid username or password.")
+
+    user_id = str(user.uuid)
+    access_token = create_access_token(user_id)
+    refresh_token = create_refresh_token(user_id)
+
+    with SessionLocal() as session:
+        session.query(RefreshToken).filter(
+            RefreshToken.user_id == user.uuid
+        ).delete()
+        session.add(RefreshToken(user_id=user.uuid, token=refresh_token))
+        session.commit()
+
+    return success({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    })
+
+
+@app.post("/refresh")
+def refresh(req: RefreshRequest):
+    payload = verify_token(req.refresh_token)
+    if payload is None or payload.get("type") != "refresh":
+        return error("Invalid refresh token.")
+
+    with SessionLocal() as session:
+        stored = session.execute(
+            select(RefreshToken).where(RefreshToken.token == req.refresh_token)
+        ).scalar_one_or_none()
+
+    if stored is None:
+        return error("Refresh token has been revoked.")
+
+    access_token = create_access_token(payload["sub"])
+    return success({
+        "access_token": access_token,
+        "token_type": "bearer",
+    })
+
+
 @app.post("/ingest")
-def ingest_url(req: IngestRequest):
+def ingest_url(req: IngestRequest, _user: User = Depends(get_current_user)):
     try:
         result = _run_with_timeout(ingest, INGEST_TIMEOUT, req.url)
         result.pop("embedding", None)
@@ -59,7 +128,7 @@ def ingest_url(req: IngestRequest):
 
 
 @app.post("/search")
-def search_bookmarks(req: SearchRequest):
+def search_bookmarks(req: SearchRequest, _user: User = Depends(get_current_user)):
     try:
         results = _run_with_timeout(search, SEARCH_TIMEOUT, req.query, req.top_k)
         return success(results)
