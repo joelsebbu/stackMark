@@ -42,6 +42,8 @@ def search(query: str, top_k: int = 3) -> list[dict]:
                 Embedding.uuid,
                 Embedding.source,
                 Embedding.url,
+                Embedding.heading,
+                Embedding.brief,
                 Embedding.created_at,
                 Embedding.embedding.cosine_distance(query_vector).label("distance"),
             )
@@ -56,6 +58,8 @@ def search(query: str, top_k: int = 3) -> list[dict]:
             "uuid": str(r.uuid),
             "source": r.source,
             "url": r.url,
+            "heading": r.heading,
+            "brief": r.brief,
             "created_at": r.created_at.isoformat(),
             "similarity": round(1 - r.distance, 4),
         }
