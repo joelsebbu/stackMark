@@ -137,7 +137,7 @@ import Layout from "../layouts/Layout.astro";
     const status = document.getElementById("status-msg") as HTMLParagraphElement;
     if (!input || !btn || !status) return;
 
-    const API_BASE = "http://localhost:8000";
+    const API_BASE = import.meta.env.PUBLIC_API_BASE || "http://localhost:8000";
 
     // Handle shared URLs from mobile share sheet
     const params = new URLSearchParams(window.location.search);
