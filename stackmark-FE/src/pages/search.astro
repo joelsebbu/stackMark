@@ -253,13 +253,23 @@ import Layout from "../layouts/Layout.astro";
 </style>
 
 <script>
+  import {
+    AuthRedirectError,
+    fetchWithAuth,
+    isLoggedIn,
+    redirectToLogin,
+  } from "../lib/auth-client";
+
   document.addEventListener("astro:page-load", () => {
     const input = document.getElementById("search-input") as HTMLInputElement;
     const btn = document.getElementById("search-btn") as HTMLButtonElement;
     const resultsArea = document.getElementById("results-area") as HTMLDivElement;
     if (!input || !btn || !resultsArea) return;
 
-    const API_BASE = "http://localhost:8000";
+    if (!isLoggedIn()) {
+      redirectToLogin();
+      return;
+    }
 
     function escapeHtml(str: string): string {
       return str
@@ -316,9 +326,8 @@ import Layout from "../layouts/Layout.astro";
       resultsArea.innerHTML = `<div class="loading">Searching...</div>`;
 
       try {
-        const res = await fetch(`${API_BASE}/search`, {
+        const res = await fetchWithAuth("/search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query, top_k: 10 }),
         });
         const data = await res.json();
@@ -332,11 +341,12 @@ import Layout from "../layouts/Layout.astro";
               <span>${escapeHtml(data.error || "Something went wrong")}</span>
             </div>`;
         }
-      } catch {
+      } catch (e) {
+        if (e instanceof AuthRedirectError) return;
         resultsArea.innerHTML = `
           <div class="empty-state">
             <p>Could not reach the server</p>
-            <span>Make sure the backend is running on ${API_BASE}</span>
+            <span>Make sure the backend is running</span>
           </div>`;
       } finally {
         btn.disabled = false;

@@ -3,7 +3,7 @@ import { ViewTransitions } from "astro:transitions";
 
 interface Props {
   title: string;
-  activeTab: "ingest" | "search";
+  activeTab: "ingest" | "search" | "login";
 }
 
 const { title, activeTab } = Astro.props;
@@ -26,13 +26,52 @@ const { title, activeTab } = Astro.props;
         navigator.serviceWorker.register("/sw.js");
       }
     </script>
+    <script>
+      import { isLoggedIn, logout } from "../lib/auth-client";
+
+      function updateAuthNav() {
+        const tabs = document.getElementById("nav-app-tabs");
+        const slot = document.getElementById("nav-auth-slot");
+        const el = document.getElementById("nav-auth-link");
+        if (!slot || !el) return;
+
+        const loggedIn = isLoggedIn();
+        if (tabs) {
+          tabs.style.display = loggedIn ? "flex" : "";
+        }
+
+        const onLoginPage = /^\/login\/?$/.test(window.location.pathname);
+
+        if (onLoginPage && !loggedIn) {
+          slot.style.display = "none";
+          return;
+        }
+
+        slot.style.display = "";
+        if (loggedIn) {
+          el.textContent = "Sign out";
+          el.href = "#";
+          el.onclick = (e) => {
+            e.preventDefault();
+            logout();
+            window.location.href = "/login";
+          };
+        } else {
+          el.textContent = "Sign in";
+          el.href = "/login";
+          el.onclick = null;
+        }
+      }
+
+      document.addEventListener("astro:page-load", updateAuthNav);
+    </script>
   </head>
   <body>
     <nav>
       <div class="nav-left">
         <a href="/" class="logo">StackMark</a>
       </div>
-      <div class="nav-center">
+      <div class="nav-center" id="nav-app-tabs">
         <a href="/" class:list={["tab", { active: activeTab === "ingest" }]}>
           Ingest
         </a>
@@ -43,19 +82,8 @@ const { title, activeTab } = Astro.props;
           Search
         </a>
       </div>
-      <div class="nav-right">
-        <div class="avatar">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path
-              d="M12 12c2.5 0 4.5-2 4.5-4.5S14.5 3 12 3 7.5 5 7.5 7.5 9.5 12 12 12zm0 1.5c-3 0-9 1.5-9 4.5v1.5h18V18c0-3-6-4.5-9-4.5z"
-            ></path>
-          </svg>
-        </div>
+      <div class="nav-right" id="nav-auth-slot">
+        <a href="/login" id="nav-auth-link" class="auth-link">Sign in</a>
       </div>
     </nav>
     <main transition:animate="fade">
@@ -115,11 +143,32 @@ const { title, activeTab } = Astro.props;
   .nav-right {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+  }
+
+  .auth-link {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+
+  .auth-link:hover {
+    color: var(--text-primary);
+    background: var(--navy-light);
   }
 
   .nav-center {
     display: flex;
     gap: 0.5rem;
+  }
+
+  /* Shown as flex via inline style when logged in (see updateAuthNav). */
+  #nav-app-tabs {
+    display: none;
   }
 
   .logo {
@@ -148,22 +197,6 @@ const { title, activeTab } = Astro.props;
   .tab.active {
     color: white;
     background: var(--orange);
-  }
-
-  .avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--navy-lighter);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-secondary);
-  }
-
-  .avatar svg {
-    width: 20px;
-    height: 20px;
   }
 
   main {
@@ -196,14 +229,5 @@ const { title, activeTab } = Astro.props;
       font-size: 0.8rem;
     }
 
-    .avatar {
-      width: 32px;
-      height: 32px;
-    }
-
-    .avatar svg {
-      width: 18px;
-      height: 18px;
-    }
   }
 </style>

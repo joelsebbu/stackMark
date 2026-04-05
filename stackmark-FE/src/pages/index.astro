@@ -58,6 +58,12 @@ import Layout from "../layouts/Layout.astro";
     transition: border-color 0.2s ease;
   }
 
+  #url-input {
+    margin-left: 0px;
+    margin-right: 0px;
+    box-sizing: border-box;
+  }
+
   input::placeholder {
     color: #5a7a9e;
   }
@@ -131,13 +137,23 @@ import Layout from "../layouts/Layout.astro";
 </style>
 
 <script>
+  import {
+    AuthRedirectError,
+    fetchWithAuth,
+    isLoggedIn,
+    redirectToLogin,
+  } from "../lib/auth-client";
+
   document.addEventListener("astro:page-load", () => {
     const input = document.getElementById("url-input") as HTMLInputElement;
     const btn = document.getElementById("save-btn") as HTMLButtonElement;
     const status = document.getElementById("status-msg") as HTMLParagraphElement;
     if (!input || !btn || !status) return;
 
-    const API_BASE = "http://localhost:8000";
+    if (!isLoggedIn()) {
+      redirectToLogin();
+      return;
+    }
 
     // Handle shared URLs from mobile share sheet
     const params = new URLSearchParams(window.location.search);
@@ -168,9 +184,8 @@ import Layout from "../layouts/Layout.astro";
       status.className = "status";
 
       try {
-        const res = await fetch(`${API_BASE}/ingest`, {
+        const res = await fetchWithAuth("/ingest", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url }),
         });
         const data = await res.json();
@@ -183,7 +198,8 @@ import Layout from "../layouts/Layout.astro";
           status.textContent = data.error || "Something went wrong";
           status.className = "status error";
         }
-      } catch {
+      } catch (e) {
+        if (e instanceof AuthRedirectError) return;
         status.textContent = "Could not reach the server";
         status.className = "status error";
       } finally {
