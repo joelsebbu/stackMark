@@ -110,8 +110,9 @@ stackmark-BE/
 │   ├── constants.py        # Model names, content length limits
 │   ├── prompts.py          # ENRICHMENT_PROMPT for web pages
 │   └── __main__.py         # CLI entry point
-└── retrieval/              # Semantic search layer
-    ├── search.py           # generate_query_embedding() + search()
+└── retrieval/              # Semantic search layer + LLM re-ranking
+    ├── search.py           # generate_query_embedding() + search() + rerank()
+    ├── constants.py        # RERANK_MODEL, RERANK_POOL config
     └── __main__.py         # CLI entry point
 ```
 
@@ -148,8 +149,9 @@ stackmark-BE/
 
 ## Retrieval flow
 1. Embed the query string using the same model/dimensions as ingestion
-2. Cosine similarity search via pgvector HNSW index
-3. Return top-k results with similarity scores
+2. Cosine similarity search via pgvector HNSW index — fetches `max(top_k, 10)` candidates
+3. LLM re-ranking: sends the query + candidate headings/briefs/similarity scores to `gemini-2.5-flash-lite`, which reorders by relevance (honors vector similarity but can promote clearly better matches)
+4. Return top `top_k` (default 5) re-ranked results. Falls back to vector order if LLM call fails
 
 ## Pipeline flow (instagram_pipeline)
 1. Parse URL → extract shortcode via regex
