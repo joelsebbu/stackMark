@@ -2,29 +2,76 @@
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="StackMark — Sign in" activeTab="login">
+<Layout title="StackMark — Welcome" activeTab="login">
   <div class="login-container">
-    <h2 class="heading">Sign in</h2>
+    <h2 class="heading">Welcome</h2>
     <form id="login-form" class="login-form">
       <label class="field">
         <span>Username</span>
-        <input
-          type="text"
-          id="username"
-          name="username"
-          autocomplete="username"
-          required
-        />
+        <div class="field-control">
+          <input
+            type="text"
+            id="username"
+            name="username"
+            autocomplete="username"
+            required
+          />
+        </div>
       </label>
       <label class="field">
         <span>Password</span>
-        <input
-          type="password"
-          id="password"
-          name="password"
-          autocomplete="current-password"
-          required
-        />
+        <div class="field-control password-wrap">
+          <input
+            type="password"
+            id="password"
+            name="password"
+            autocomplete="current-password"
+            required
+          />
+          <button
+            type="button"
+            id="password-toggle"
+            class="password-toggle"
+            aria-label="Show password"
+            aria-pressed="false"
+          >
+            <svg
+              class="password-toggle__icon password-toggle__icon--eye"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"
+              ></path>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              ></path>
+            </svg>
+            <svg
+              class="password-toggle__icon password-toggle__icon--eye-off"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228 3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"
+              ></path>
+            </svg>
+          </button>
+        </div>
       </label>
       <button type="submit" id="submit-btn" class="btn-primary btn-primary--pill">
         Sign in
@@ -39,13 +86,15 @@ import Layout from "../layouts/Layout.astro";
     flex: 1;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
+    align-self: center;
     gap: 1.25rem;
-    padding: 2rem;
-    max-width: 400px;
+    box-sizing: border-box;
+    padding: 2rem 1.25rem;
+    padding-bottom: max(2rem, env(safe-area-inset-bottom));
+    width: min(400px, 100%);
     margin: 0 auto;
-    width: 100%;
   }
 
   .heading {
@@ -53,6 +102,7 @@ import Layout from "../layouts/Layout.astro";
     font-weight: 600;
     color: #d5e4fa;
     letter-spacing: -0.02em;
+    text-align: center;
   }
 
   .login-form {
@@ -60,6 +110,7 @@ import Layout from "../layouts/Layout.astro";
     flex-direction: column;
     gap: 1rem;
     width: 100%;
+    min-width: 0;
   }
 
   .field {
@@ -68,9 +119,23 @@ import Layout from "../layouts/Layout.astro";
     gap: 0.35rem;
     font-size: 0.85rem;
     color: #a0b4d0;
+    min-width: 0;
   }
 
-  .field input {
+  .field-control {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    align-self: stretch;
+  }
+
+  .field-control input {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     padding: 0.75rem 1rem;
     border-radius: 10px;
     border: 1px solid #1d2b3c;
@@ -82,13 +147,67 @@ import Layout from "../layouts/Layout.astro";
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
-  .field input:focus {
+  .field-control input:focus {
     border-color: #ff671f;
     box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.35);
   }
 
+  .password-wrap input {
+    padding-right: 3.25rem;
+  }
+
+  .password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 0.35rem;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: #7a9bc4;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .password-toggle__icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex-shrink: 0;
+  }
+
+  .password-toggle__icon--eye-off {
+    display: none;
+  }
+
+  .password-toggle[aria-pressed="true"] .password-toggle__icon--eye {
+    display: none;
+  }
+
+  .password-toggle[aria-pressed="true"] .password-toggle__icon--eye-off {
+    display: block;
+  }
+
+  .password-toggle:hover {
+    color: #ff671f;
+  }
+
+  .password-toggle:focus-visible {
+    color: #ff671f;
+    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.35);
+    border-radius: 6px;
+  }
+
   #submit-btn {
     margin-top: 0.25rem;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .status {
@@ -100,6 +219,55 @@ import Layout from "../layouts/Layout.astro";
   .status.error {
     color: #f97386;
   }
+
+  @media (max-width: 640px) {
+    .login-container {
+      justify-content: flex-start;
+      padding: 2rem 0;
+      padding-top: max(2rem, env(safe-area-inset-top));
+      padding-bottom: max(2rem, env(safe-area-inset-bottom));
+      gap: 1.125rem;
+      min-height: calc(
+        100dvh - 56px - env(safe-area-inset-top, 0px) -
+          env(safe-area-inset-bottom, 0px)
+      );
+    }
+
+    .heading {
+      font-size: 1.35rem;
+    }
+
+    .field {
+      font-size: 0.9rem;
+    }
+
+    .field-control input {
+      /* Avoid iOS zoom on focus; keep comfortable tap height */
+      font-size: 1rem;
+      min-height: 48px;
+      padding: 0.65rem 1rem;
+    }
+
+    .password-toggle {
+      width: 2.75rem;
+      height: 2.75rem;
+      right: 0.25rem;
+    }
+
+    .password-toggle__icon {
+      width: 1.45rem;
+      height: 1.45rem;
+    }
+
+    .password-wrap input {
+      padding-right: 3.5rem;
+    }
+
+    #submit-btn {
+      min-height: 48px;
+      font-size: 1rem;
+    }
+  }
 </style>
 
 <script>
@@ -109,7 +277,21 @@ import Layout from "../layouts/Layout.astro";
     const form = document.getElementById("login-form") as HTMLFormElement;
     const status = document.getElementById("status-msg") as HTMLParagraphElement;
     const btn = document.getElementById("submit-btn") as HTMLButtonElement;
+    const passwordInput = document.getElementById("password") as HTMLInputElement | null;
+    const passwordToggle = document.getElementById("password-toggle") as HTMLButtonElement | null;
     if (!form || !status || !btn) return;
+
+    if (passwordInput && passwordToggle) {
+      passwordToggle.addEventListener("click", () => {
+        const visible = passwordInput.type === "text";
+        passwordInput.type = visible ? "password" : "text";
+        passwordToggle.setAttribute("aria-pressed", visible ? "false" : "true");
+        passwordToggle.setAttribute(
+          "aria-label",
+          visible ? "Show password" : "Hide password",
+        );
+      });
+    }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();

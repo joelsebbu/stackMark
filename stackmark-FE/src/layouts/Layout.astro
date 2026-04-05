@@ -14,7 +14,10 @@ const { title, activeTab } = Astro.props;
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#0a1929" />
     <meta name="description" content="StackMark — your personal bookmark manager" />
     <link rel="manifest" href="/manifest.json" />
@@ -126,9 +129,14 @@ const { title, activeTab } = Astro.props;
     box-sizing: border-box;
   }
 
+  html {
+    overflow-x: hidden;
+  }
+
   html,
   body {
     height: 100%;
+    max-width: 100%;
     font-family: "Inter", system-ui, -apple-system, sans-serif;
     background: var(--surface);
     color: var(--text-primary);
@@ -137,6 +145,7 @@ const { title, activeTab } = Astro.props;
   body {
     display: flex;
     flex-direction: column;
+    overflow-x: hidden;
   }
 
   /* Vanta.js DOTS canvas — mouse uses window events; keep clicks for UI */
@@ -248,13 +257,24 @@ const { title, activeTab } = Astro.props;
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    width: 100%;
   }
 
   /* Mobile responsive */
   @media (max-width: 640px) {
+    main {
+      overflow-x: clip;
+      box-sizing: border-box;
+      padding-left: max(1rem, env(safe-area-inset-left));
+      padding-right: max(1rem, env(safe-area-inset-right));
+    }
+
     nav {
       padding: 0 1rem;
       height: 56px;
+      padding-left: max(1rem, env(safe-area-inset-left));
+      padding-right: max(1rem, env(safe-area-inset-right));
     }
 
     .nav-left {
