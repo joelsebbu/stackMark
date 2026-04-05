@@ -26,7 +26,9 @@ import Layout from "../layouts/Layout.astro";
           required
         />
       </label>
-      <button type="submit" id="submit-btn">Sign in</button>
+      <button type="submit" id="submit-btn" class="btn-primary btn-primary--pill">
+        Sign in
+      </button>
     </form>
     <p id="status-msg" class="status"></p>
   </div>
@@ -77,34 +79,16 @@ import Layout from "../layouts/Layout.astro";
     font-size: 0.9rem;
     font-family: inherit;
     outline: none;
-    transition: border-color 0.2s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
 
   .field input:focus {
-    border-color: #1c3f94;
+    border-color: #ff671f;
+    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.35);
   }
 
-  button[type="submit"] {
-    padding: 0.75rem 1.25rem;
-    border-radius: 10px;
-    border: none;
-    background: #ff671f;
-    color: white;
-    font-size: 0.875rem;
-    font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
+  #submit-btn {
     margin-top: 0.25rem;
-    transition: background 0.2s ease;
-  }
-
-  button[type="submit"]:hover {
-    background: #e55a18;
-  }
-
-  button[type="submit"]:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
   }
 
   .status {
