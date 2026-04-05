@@ -4,7 +4,7 @@ node_modules/
 # Build output
 dist/
 .astro/
-
+builds/
 # Environment variables
 .env
 .env.*
