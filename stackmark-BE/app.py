@@ -1,8 +1,10 @@
 """FastAPI application for StackMark."""
 
 import concurrent.futures
+import os
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -21,6 +23,18 @@ from retrieval.search import search
 from router import ingest
 
 app = FastAPI(title="StackMark", version="0.1.0")
+
+_cors_origins = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "http://localhost:4321").split(",")
+    if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 INGEST_TIMEOUT = 300  # 5 minutes
 SEARCH_TIMEOUT = 30   # 30 seconds
