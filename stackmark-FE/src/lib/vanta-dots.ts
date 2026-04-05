@@ -4,6 +4,17 @@
  */
 let instance: { destroy: () => void } | null = null;
 
+/** Reads `theme.css` hex tokens (e.g. `--orange`) for Vanta numeric options. */
+function cssHexVarToRgbInt(varName: string): number {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue(varName)
+    .trim();
+  if (!raw) return 0;
+  const hex = raw.startsWith("#") ? raw.slice(1) : raw;
+  const n = parseInt(hex, 16);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 type VantaWindow = Window &
   typeof globalThis & {
     THREE: object;
@@ -40,9 +51,9 @@ export async function initVantaDots(): Promise<void> {
     minWidth: 200,
     scale: 1,
     scaleMobile: 1,
-    color: 0xff671f,
-    color2: 0xb4c5ff,
-    backgroundColor: 0x051424,
+    color: cssHexVarToRgbInt("--orange"),
+    color2: cssHexVarToRgbInt("--blue-light"),
+    backgroundColor: cssHexVarToRgbInt("--surface"),
     showLines: false,
   });
 

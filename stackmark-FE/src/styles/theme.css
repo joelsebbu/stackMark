@@ -1,0 +1,41 @@
+/**
+ * Global color tokens (only place in `src/` that should define raw #hex / rgba).
+ * Import once from a layout: import "../styles/theme.css";
+ *
+ * Non-CSS consumers: `src/lib/theme-chrome.ts` (meta theme-color), `public/manifest.json`,
+ * `public/*.svg` — keep navy / surface hex in sync with this file.
+ */
+:root {
+  /* Same hex as THEME_COLOR_NAVY in src/lib/theme-chrome.ts */
+  --navy: #0a1929;
+  --navy-light: #122031;
+  --navy-lighter: #1d2b3c;
+  --blue: #1c3f94;
+  --blue-light: #b4c5ff;
+  --orange: #ff671f;
+  --orange-hover: #e55a18;
+  --orange-light: #ffb599;
+  --focus-ring: 0 0 0 2px rgba(255, 103, 31, 0.35);
+  --focus-ring-btn: 0 0 0 2px rgba(255, 103, 31, 0.55),
+    0 0 0 4px rgba(255, 103, 31, 0.2);
+  --focus-ring-outline: 0 0 0 2px rgba(255, 103, 31, 0.45);
+  /* Nav / tabs: orange tints + 1px rings (same hue as --orange) */
+  --tint-orange-soft: rgba(255, 103, 31, 0.16);
+  --tint-orange-medium: rgba(255, 103, 31, 0.18);
+  --ring-orange-32: 0 0 0 1px rgba(255, 103, 31, 0.32);
+  --ring-orange-35: 0 0 0 1px rgba(255, 103, 31, 0.35);
+  --ring-orange-45: 0 0 0 1px rgba(255, 103, 31, 0.45);
+  --focus-ring-nav: 0 0 0 2px rgba(255, 103, 31, 0.45),
+    0 0 0 4px rgba(255, 103, 31, 0.15);
+  --focus-ring-nav-active: 0 0 0 2px rgba(255, 255, 255, 0.35),
+    0 0 0 4px rgba(255, 103, 31, 0.35);
+  --text-primary: #d5e4fa;
+  --text-secondary: #a0b4d0;
+  --text-muted: #5a7a9e;
+  --text-subtle: #7a9bc4;
+  --success: #4ade80;
+  --error: #f97386;
+  --surface: #051424;
+  /* Elevation (neutral black) */
+  --shadow-search-bar: 0 -4px 24px rgba(0, 0, 0, 0.35);
+}

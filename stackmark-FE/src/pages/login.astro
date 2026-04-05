@@ -101,7 +101,7 @@ import Layout from "../layouts/Layout.astro";
   .heading {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #d5e4fa;
+    color: var(--text-primary);
     letter-spacing: -0.02em;
     text-align: center;
   }
@@ -119,7 +119,7 @@ import Layout from "../layouts/Layout.astro";
     flex-direction: column;
     gap: 0.35rem;
     font-size: 0.85rem;
-    color: #a0b4d0;
+    color: var(--text-secondary);
     min-width: 0;
   }
 
@@ -139,9 +139,9 @@ import Layout from "../layouts/Layout.astro";
     box-sizing: border-box;
     padding: 0.75rem 1rem;
     border-radius: 10px;
-    border: 1px solid #1d2b3c;
-    background: #0a1929;
-    color: #d5e4fa;
+    border: 1px solid var(--navy-lighter);
+    background: var(--navy);
+    color: var(--text-primary);
     font-size: 0.9rem;
     font-family: inherit;
     outline: none;
@@ -149,8 +149,8 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .field-control input:focus {
-    border-color: #ff671f;
-    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.35);
+    border-color: var(--orange);
+    box-shadow: var(--focus-ring);
   }
 
   /* Browsers paint their own background on autofilled inputs; paint ours instead */
@@ -158,26 +158,26 @@ import Layout from "../layouts/Layout.astro";
   .field-control input:-webkit-autofill:hover,
   .field-control input:-webkit-autofill:focus,
   .field-control input:-webkit-autofill:active {
-    -webkit-text-fill-color: #d5e4fa !important;
-    caret-color: #d5e4fa;
-    -webkit-box-shadow: 0 0 0 1000px #0a1929 inset !important;
-    box-shadow: 0 0 0 1000px #0a1929 inset !important;
-    border: 1px solid #1d2b3c;
+    -webkit-text-fill-color: var(--text-primary) !important;
+    caret-color: var(--text-primary);
+    -webkit-box-shadow: 0 0 0 1000px var(--navy) inset !important;
+    box-shadow: 0 0 0 1000px var(--navy) inset !important;
+    border: 1px solid var(--navy-lighter);
   }
 
   .field-control input:-webkit-autofill:focus {
-    border-color: #ff671f;
-    -webkit-box-shadow: 0 0 0 1000px #0a1929 inset, 0 0 0 2px rgba(255, 103, 31, 0.35) !important;
-    box-shadow: 0 0 0 1000px #0a1929 inset, 0 0 0 2px rgba(255, 103, 31, 0.35) !important;
+    border-color: var(--orange);
+    -webkit-box-shadow: 0 0 0 1000px var(--navy) inset, var(--focus-ring) !important;
+    box-shadow: 0 0 0 1000px var(--navy) inset, var(--focus-ring) !important;
   }
 
   .field-control input:autofill {
-    box-shadow: 0 0 0 1000px #0a1929 inset;
-    color: #d5e4fa;
+    box-shadow: 0 0 0 1000px var(--navy) inset;
+    color: var(--text-primary);
   }
 
   .field-control input:autofill:focus {
-    box-shadow: 0 0 0 1000px #0a1929 inset, 0 0 0 2px rgba(255, 103, 31, 0.35);
+    box-shadow: 0 0 0 1000px var(--navy) inset, var(--focus-ring);
   }
 
   .password-wrap input {
@@ -198,7 +198,7 @@ import Layout from "../layouts/Layout.astro";
     border: none;
     border-radius: 6px;
     background: transparent;
-    color: #7a9bc4;
+    color: var(--text-subtle);
     cursor: pointer;
     outline: none;
   }
@@ -222,12 +222,12 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .password-toggle:hover {
-    color: #ff671f;
+    color: var(--orange);
   }
 
   .password-toggle:focus-visible {
-    color: #ff671f;
-    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.35);
+    color: var(--orange);
+    box-shadow: var(--focus-ring);
     border-radius: 6px;
   }
 
@@ -245,7 +245,7 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .status.error {
-    color: #f97386;
+    color: var(--error);
   }
 
   @media (max-width: 640px) {
@@ -330,15 +330,15 @@ import Layout from "../layouts/Layout.astro";
 
       try {
         const result = await login(username, password);
-        if (result.ok) {
-          const params = new URLSearchParams(window.location.search);
-          const redirect = params.get("redirect");
-          window.location.href =
-            redirect && redirect.startsWith("/") ? redirect : "/";
-        } else {
+        if (result.ok === false) {
           status.textContent = result.error;
           status.className = "status error";
+          return;
         }
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get("redirect");
+        window.location.href =
+          redirect && redirect.startsWith("/") ? redirect : "/";
       } catch {
         status.textContent = "Could not reach the server";
         status.className = "status error";

@@ -32,7 +32,7 @@ import Layout from "../layouts/Layout.astro";
   .heading {
     font-size: 1.5rem;
     font-weight: 600;
-    color: #d5e4fa;
+    color: var(--text-primary);
     letter-spacing: -0.02em;
   }
 
@@ -49,9 +49,9 @@ import Layout from "../layouts/Layout.astro";
     flex: 1;
     padding: 0.75rem 1rem;
     border-radius: 10px;
-    border: 1px solid #1d2b3c;
-    background: #0a1929;
-    color: #d5e4fa;
+    border: 1px solid var(--navy-lighter);
+    background: var(--navy);
+    color: var(--text-primary);
     font-size: 0.9rem;
     font-family: inherit;
     outline: none;
@@ -65,12 +65,12 @@ import Layout from "../layouts/Layout.astro";
   }
 
   input::placeholder {
-    color: #5a7a9e;
+    color: var(--text-muted);
   }
 
   input:focus {
-    border-color: #ff671f;
-    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.35);
+    border-color: var(--orange);
+    box-shadow: var(--focus-ring);
   }
 
   #save-btn {
@@ -83,11 +83,11 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .status.success {
-    color: #4ade80;
+    color: var(--success);
   }
 
   .status.error {
-    color: #f97386;
+    color: var(--error);
   }
 
   @media (max-width: 640px) {
