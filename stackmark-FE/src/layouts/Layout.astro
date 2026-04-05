@@ -1,5 +1,6 @@
 ---
 import { ViewTransitions } from "astro:transitions";
+import "../styles/ui.css";
 
 interface Props {
   title: string;
@@ -65,8 +66,16 @@ const { title, activeTab } = Astro.props;
 
       document.addEventListener("astro:page-load", updateAuthNav);
     </script>
+    <script>
+      import { initVantaDots } from "../lib/vanta-dots";
+
+      document.addEventListener("astro:page-load", () => {
+        void initVantaDots();
+      });
+    </script>
   </head>
   <body>
+    <div id="vanta-bg" class="vanta-bg" aria-hidden="true"></div>
     <nav>
       <div class="nav-left">
         <a href="/" class="logo">StackMark</a>
@@ -100,7 +109,12 @@ const { title, activeTab } = Astro.props;
     --blue: #1c3f94;
     --blue-light: #b4c5ff;
     --orange: #ff671f;
+    --orange-hover: #e55a18;
     --orange-light: #ffb599;
+    --focus-ring: 0 0 0 2px rgba(255, 103, 31, 0.35);
+    --focus-ring-btn: 0 0 0 2px rgba(255, 103, 31, 0.55),
+      0 0 0 4px rgba(255, 103, 31, 0.2);
+    --focus-ring-outline: 0 0 0 2px rgba(255, 103, 31, 0.45);
     --text-primary: #d5e4fa;
     --text-secondary: #a0b4d0;
     --surface: #051424;
@@ -123,6 +137,20 @@ const { title, activeTab } = Astro.props;
   body {
     display: flex;
     flex-direction: column;
+  }
+
+  /* Vanta.js DOTS canvas — mouse uses window events; keep clicks for UI */
+  .vanta-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  nav,
+  main {
+    position: relative;
+    z-index: 1;
   }
 
   nav {
@@ -153,12 +181,13 @@ const { title, activeTab } = Astro.props;
     text-decoration: none;
     padding: 0.5rem 0.75rem;
     border-radius: 8px;
-    transition: color 0.2s ease, background 0.2s ease;
+    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   }
 
   .auth-link:hover {
     color: var(--text-primary);
-    background: var(--navy-light);
+    background: rgba(255, 103, 31, 0.18);
+    box-shadow: 0 0 0 1px rgba(255, 103, 31, 0.35);
   }
 
   .nav-center {
@@ -186,17 +215,33 @@ const { title, activeTab } = Astro.props;
     font-weight: 500;
     color: var(--text-secondary);
     text-decoration: none;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   }
 
-  .tab:hover {
+  .tab:hover:not(.active) {
     color: var(--text-primary);
-    background: var(--navy-light);
+    background: rgba(255, 103, 31, 0.16);
+    box-shadow: 0 0 0 1px rgba(255, 103, 31, 0.32);
   }
 
   .tab.active {
     color: white;
     background: var(--orange);
+  }
+
+  .tab.active:hover {
+    background: #e55a18;
+    box-shadow: 0 0 0 1px rgba(255, 103, 31, 0.45);
+  }
+
+  .tab:focus-visible,
+  .auth-link:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.45), 0 0 0 4px rgba(255, 103, 31, 0.15);
+  }
+
+  .tab.active:focus-visible {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 0 0 4px rgba(255, 103, 31, 0.35);
   }
 
   main {
