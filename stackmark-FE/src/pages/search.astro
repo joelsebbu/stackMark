@@ -52,13 +52,13 @@ import Layout from "../layouts/Layout.astro";
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    color: #5a7a9e;
+    color: var(--text-muted);
   }
 
   .empty-state p {
     font-size: 1.125rem;
     font-weight: 500;
-    color: #a0b4d0;
+    color: var(--text-secondary);
   }
 
   .empty-state span {
@@ -76,19 +76,19 @@ import Layout from "../layouts/Layout.astro";
     gap: 0.75rem;
     padding: 1rem 2rem;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-    background: #0a1929;
-    border-top: 1px solid #1d2b3c;
+    background: var(--navy);
+    border-top: 1px solid var(--navy-lighter);
     flex-shrink: 0;
-    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);
+    box-shadow: var(--shadow-search-bar);
   }
 
   .search-bar input {
     flex: 1;
     padding: 0.75rem 1rem;
     border-radius: 10px;
-    border: 1px solid #1d2b3c;
-    background: #051424;
-    color: #d5e4fa;
+    border: 1px solid var(--navy-lighter);
+    background: var(--surface);
+    color: var(--text-primary);
     font-size: 0.9rem;
     font-family: inherit;
     outline: none;
@@ -96,12 +96,12 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .search-bar input::placeholder {
-    color: #5a7a9e;
+    color: var(--text-muted);
   }
 
   .search-bar input:focus {
-    border-color: #ff671f;
-    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.35);
+    border-color: var(--orange);
+    box-shadow: var(--focus-ring);
   }
 
   .search-bar button svg {
@@ -137,7 +137,7 @@ import Layout from "../layouts/Layout.astro";
 
 <style is:global>
   .result-card {
-    background: #122031;
+    background: var(--navy-light);
     border-radius: 10px;
     padding: 1rem 1.25rem;
     display: flex;
@@ -147,7 +147,7 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .result-card:hover {
-    background: #1d2b3c;
+    background: var(--navy-lighter);
   }
 
   .card-header {
@@ -160,19 +160,19 @@ import Layout from "../layouts/Layout.astro";
   .card-title {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #d5e4fa;
+    color: var(--text-primary);
   }
 
   .card-score {
     font-size: 0.8rem;
     font-weight: 600;
-    color: #ff671f;
+    color: var(--orange);
     white-space: nowrap;
   }
 
   .card-description {
     font-size: 0.85rem;
-    color: #a0b4d0;
+    color: var(--text-secondary);
     line-height: 1.4;
   }
 
@@ -186,8 +186,8 @@ import Layout from "../layouts/Layout.astro";
   .card-source {
     font-size: 0.75rem;
     font-weight: 500;
-    color: #b4c5ff;
-    background: #1c3f94;
+    color: var(--blue-light);
+    background: var(--blue);
     padding: 0.2rem 0.6rem;
     border-radius: 6px;
     text-transform: capitalize;
@@ -195,15 +195,15 @@ import Layout from "../layouts/Layout.astro";
 
   .card-tag {
     font-size: 0.7rem;
-    color: #a0b4d0;
-    background: #1d2b3c;
+    color: var(--text-secondary);
+    background: var(--navy-lighter);
     padding: 0.2rem 0.5rem;
     border-radius: 6px;
   }
 
   .card-url {
     font-size: 0.75rem;
-    color: #5a7a9e;
+    color: var(--text-muted);
     text-decoration: none;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -212,12 +212,12 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .card-url:hover {
-    color: #b4c5ff;
+    color: var(--blue-light);
   }
 
   .loading {
     text-align: center;
-    color: #5a7a9e;
+    color: var(--text-muted);
     padding: 2rem;
   }
 

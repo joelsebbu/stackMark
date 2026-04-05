@@ -1,5 +1,7 @@
 ---
 import { ViewTransitions } from "astro:transitions";
+import { THEME_COLOR_NAVY } from "../lib/theme-chrome";
+import "../styles/theme.css";
 import "../styles/ui.css";
 
 interface Props {
@@ -18,7 +20,7 @@ const { title, activeTab } = Astro.props;
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#0a1929" />
+    <meta name="theme-color" content={THEME_COLOR_NAVY} />
     <meta name="description" content="StackMark — your personal bookmark manager" />
     <!-- Sync auth gate before body parses — must match keys in src/lib/auth-client.ts -->
     {
@@ -58,7 +60,7 @@ const { title, activeTab } = Astro.props;
       function updateAuthNav() {
         const tabs = document.getElementById("nav-app-tabs");
         const slot = document.getElementById("nav-auth-slot");
-        const el = document.getElementById("nav-auth-link");
+        const el = document.getElementById("nav-auth-link") as HTMLAnchorElement | null;
         if (!slot || !el) return;
 
         const loggedIn = isLoggedIn();
@@ -109,9 +111,15 @@ const { title, activeTab } = Astro.props;
           Search
         </a>
       </div>
-      <div class="nav-right" id="nav-auth-slot">
-        <a href="/login" id="nav-auth-link" class="auth-link">Sign in</a>
-      </div>
+      {
+        activeTab !== "login" && (
+          <div class="nav-right" id="nav-auth-slot">
+            <a href="/login" id="nav-auth-link" class="auth-link">
+              Sign in
+            </a>
+          </div>
+        )
+      }
     </nav>
     <main transition:animate="fade">
       <slot />
@@ -120,24 +128,6 @@ const { title, activeTab } = Astro.props;
 </html>
 
 <style>
-  :root {
-    --navy: #0a1929;
-    --navy-light: #122031;
-    --navy-lighter: #1d2b3c;
-    --blue: #1c3f94;
-    --blue-light: #b4c5ff;
-    --orange: #ff671f;
-    --orange-hover: #e55a18;
-    --orange-light: #ffb599;
-    --focus-ring: 0 0 0 2px rgba(255, 103, 31, 0.35);
-    --focus-ring-btn: 0 0 0 2px rgba(255, 103, 31, 0.55),
-      0 0 0 4px rgba(255, 103, 31, 0.2);
-    --focus-ring-outline: 0 0 0 2px rgba(255, 103, 31, 0.45);
-    --text-primary: #d5e4fa;
-    --text-secondary: #a0b4d0;
-    --surface: #051424;
-  }
-
   * {
     margin: 0;
     padding: 0;
@@ -212,8 +202,8 @@ const { title, activeTab } = Astro.props;
 
   .auth-link:hover {
     color: var(--text-primary);
-    background: rgba(255, 103, 31, 0.18);
-    box-shadow: 0 0 0 1px rgba(255, 103, 31, 0.35);
+    background: var(--tint-orange-medium);
+    box-shadow: var(--ring-orange-35);
   }
 
   .nav-center {
@@ -246,8 +236,8 @@ const { title, activeTab } = Astro.props;
 
   .tab:hover:not(.active) {
     color: var(--text-primary);
-    background: rgba(255, 103, 31, 0.16);
-    box-shadow: 0 0 0 1px rgba(255, 103, 31, 0.32);
+    background: var(--tint-orange-soft);
+    box-shadow: var(--ring-orange-32);
   }
 
   .tab.active {
@@ -256,18 +246,18 @@ const { title, activeTab } = Astro.props;
   }
 
   .tab.active:hover {
-    background: #e55a18;
-    box-shadow: 0 0 0 1px rgba(255, 103, 31, 0.45);
+    background: var(--orange-hover);
+    box-shadow: var(--ring-orange-45);
   }
 
   .tab:focus-visible,
   .auth-link:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(255, 103, 31, 0.45), 0 0 0 4px rgba(255, 103, 31, 0.15);
+    box-shadow: var(--focus-ring-nav);
   }
 
   .tab.active:focus-visible {
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35), 0 0 0 4px rgba(255, 103, 31, 0.35);
+    box-shadow: var(--focus-ring-nav-active);
   }
 
   main {

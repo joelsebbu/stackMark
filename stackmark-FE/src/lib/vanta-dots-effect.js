@@ -16,9 +16,9 @@ const FOG_DENSITY = 0.00038;
 class Effect extends VantaBase {
   static initClass() {
     this.prototype.defaultOptions = {
-      color: 0xff8820,
-      color2: 0xff8820,
-      backgroundColor: 0x222222,
+      color: 0xff671f,
+      color2: 0xb4c5ff,
+      backgroundColor: 0x051424,
       size: 3,
       spacing: 35,
       showLines: true,
