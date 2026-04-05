@@ -66,8 +66,16 @@ const { title, activeTab } = Astro.props;
 
       document.addEventListener("astro:page-load", updateAuthNav);
     </script>
+    <script>
+      import { initVantaDots } from "../lib/vanta-dots";
+
+      document.addEventListener("astro:page-load", () => {
+        void initVantaDots();
+      });
+    </script>
   </head>
   <body>
+    <div id="vanta-bg" class="vanta-bg" aria-hidden="true"></div>
     <nav>
       <div class="nav-left">
         <a href="/" class="logo">StackMark</a>
@@ -129,6 +137,20 @@ const { title, activeTab } = Astro.props;
   body {
     display: flex;
     flex-direction: column;
+  }
+
+  /* Vanta.js DOTS canvas — mouse uses window events; keep clicks for UI */
+  .vanta-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  nav,
+  main {
+    position: relative;
+    z-index: 1;
   }
 
   nav {
