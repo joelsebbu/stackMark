@@ -202,8 +202,9 @@ stackmark-BE/
 │       ├── embedding.py     # Embedding model (uuid, source, url, vector, created_at)
 │       ├── user.py          # User model (uuid, username, password hash, created_at)
 │       └── refresh_token.py # RefreshToken model (uuid, user_id FK, token, created_at)
-├── retrieval/               # Semantic search layer
-│   ├── search.py            # generate_query_embedding() + search()
+├── retrieval/               # Semantic search layer + LLM re-ranking
+│   ├── search.py            # generate_query_embedding() + search() + rerank()
+│   ├── constants.py         # RERANK_MODEL, RERANK_POOL config
 │   └── __main__.py          # CLI entry point
 └── alembic/                 # Database migrations
     └── versions/
