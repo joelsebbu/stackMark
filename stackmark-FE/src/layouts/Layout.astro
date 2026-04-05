@@ -20,6 +20,28 @@ const { title, activeTab } = Astro.props;
     />
     <meta name="theme-color" content="#0a1929" />
     <meta name="description" content="StackMark — your personal bookmark manager" />
+    <!-- Sync auth gate before body parses — must match keys in src/lib/auth-client.ts -->
+    {
+      activeTab !== "login" && (
+        <script is:inline>
+          (function () {
+            try {
+              if (
+                localStorage.getItem("stackmark_access_token") ||
+                localStorage.getItem("stackmark_refresh_token")
+              )
+                return;
+              var path = location.pathname + location.search;
+              var q =
+                path && !path.startsWith("/login")
+                  ? "?redirect=" + encodeURIComponent(path)
+                  : "";
+              location.replace("/login" + q);
+            } catch (e) {}
+          })();
+        </script>
+      )
+    }
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
@@ -42,13 +64,6 @@ const { title, activeTab } = Astro.props;
         const loggedIn = isLoggedIn();
         if (tabs) {
           tabs.style.display = loggedIn ? "flex" : "";
-        }
-
-        const onLoginPage = /^\/login\/?$/.test(window.location.pathname);
-
-        if (onLoginPage && !loggedIn) {
-          slot.style.display = "none";
-          return;
         }
 
         slot.style.display = "";
@@ -156,13 +171,15 @@ const { title, activeTab } = Astro.props;
     pointer-events: none;
   }
 
-  nav,
   main {
     position: relative;
     z-index: 1;
   }
 
   nav {
+    position: sticky;
+    top: 0;
+    z-index: 10;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -257,6 +274,7 @@ const { title, activeTab } = Astro.props;
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0;
     min-width: 0;
     width: 100%;
   }
