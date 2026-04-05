@@ -38,6 +38,8 @@ import Layout from "../layouts/Layout.astro";
     flex: 1;
     overflow-y: auto;
     padding: 1.5rem 2rem;
+    /* Space for fixed search bar + safe area (bar ~72px + padding) */
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
@@ -64,13 +66,20 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .search-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 20;
     display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 1rem 2rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     background: #0a1929;
     border-top: 1px solid #1d2b3c;
     flex-shrink: 0;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.35);
   }
 
   .search-bar input {
@@ -126,10 +135,12 @@ import Layout from "../layouts/Layout.astro";
   @media (max-width: 640px) {
     .results-area {
       padding: 1rem;
+      padding-bottom: calc(5.25rem + env(safe-area-inset-bottom, 0px));
     }
 
     .search-bar {
       padding: 0.75rem 1rem;
+      padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
     }
 
     .search-bar input {
@@ -291,26 +302,46 @@ import Layout from "../layouts/Layout.astro";
 
       resultsArea.innerHTML = results
         .map((r: any) => {
-          const meta = r.metadata || {};
-          const tags = (meta.tags || []).slice(0, 4);
+          const heading = String(r.heading ?? "").trim();
+          const brief = String(r.brief ?? "").trim();
           const score =
             r.similarity != null
               ? `${Math.round(r.similarity * 100)}%`
               : "";
-          const desc = meta.description || "";
           const source = r.source || "web";
           const url = r.url || "";
+
+          let title: string;
+          let body: string;
+          if (heading) {
+            title = heading;
+            body = brief;
+          } else if (brief) {
+            title = brief.length > 80 ? `${brief.slice(0, 80)}…` : brief;
+            body = brief.length > 80 ? brief : "";
+          } else {
+            try {
+              title = url ? new URL(url).hostname.replace(/^www\./, "") : "Bookmark";
+            } catch {
+              title = "Bookmark";
+            }
+            body = "";
+          }
+
+          const bodyHtml =
+            body.length > 0
+              ? `<p class="card-description">${escapeHtml(body.length > 400 ? `${body.slice(0, 400)}…` : body)}</p>`
+              : "";
 
           return `
           <div class="result-card">
             <div class="card-header">
-              <span class="card-title">${escapeHtml(desc.slice(0, 80))}${desc.length > 80 ? "..." : ""}</span>
+              <span class="card-title">${escapeHtml(title)}</span>
               ${score ? `<span class="card-score">${score} match</span>` : ""}
             </div>
-            ${desc.length > 80 ? `<p class="card-description">${escapeHtml(desc.slice(0, 200))}${desc.length > 200 ? "..." : ""}</p>` : ""}
+            ${bodyHtml}
             <div class="card-meta">
               <span class="card-source">${escapeHtml(source)}</span>
-              ${tags.map((t: string) => `<span class="card-tag">${escapeHtml(t)}</span>`).join("")}
             </div>
             ${url ? `<a class="card-url" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>` : ""}
           </div>`;
